@@ -58,6 +58,8 @@ npx tc-mcp install claude-desktop
 
 Then ask your agent things like "who owes rent?", "message the lead who inquired yesterday", or "create a maintenance request for unit 3B".
 
+If you skip `login` (or tokens expire), tools fail with a clear "not signed in" message and the agent offers to open a browser sign-in window via the `tc_login` tool.
+
 ## MCP tools
 
 35 tools across six areas, plus resources `tc://guide`, `tc://catalog`, `tc://property/{id}`, `tc://unit/{id}`, `tc://contact/{id}`:

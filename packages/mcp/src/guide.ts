@@ -29,6 +29,19 @@ For detailed entity information, read the MCP resources:
 When a reference is missing (entity not found in cache), resolve it by calling
 the corresponding list tool (\`list_properties\`, \`list_units\`, \`list_contacts\`).
 
+## Authentication
+
+If any tool fails with HTTP 401 or "No auth token available", the user is not signed in
+to TenantCloud. Do NOT keep retrying. Instead:
+
+1. Tell the user they are not signed in and that a browser sign-in window can be opened.
+2. Once they agree, call \`tc_login\` - it opens a browser window and waits (up to several
+   minutes) while they sign in, then reports who is signed in.
+3. Retry the original request.
+
+If \`tc_login\` is unavailable or fails (no Chromium found, window closed, timeout), ask the
+user to run \`tc-mcp login\` in a terminal, then retry.
+
 ## Entities
 
 ### UserInfo

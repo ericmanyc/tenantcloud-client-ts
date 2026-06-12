@@ -6,6 +6,20 @@ export function toolSuccess(payload: unknown) {
 }
 
 export function toolError(error: unknown) {
+  if (error instanceof TcClientError && error.httpStatus === 401) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text:
+            `${error.message} (HTTP 401). The user is not signed in to TenantCloud. ` +
+            "Tell them, then offer to open a browser sign-in window via the tc_login tool. " +
+            'Alternatively they can run "tc-mcp login" in a terminal and retry.',
+        },
+      ],
+      isError: true,
+    };
+  }
   const message =
     error instanceof TcClientError
       ? `${error.message} (HTTP ${error.httpStatus})`

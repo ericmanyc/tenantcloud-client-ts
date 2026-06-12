@@ -13,6 +13,8 @@ npx tc-mcp install claude-code   # or: claude-desktop
 
 `install` registers the server in the right config file. For other MCP clients, configure a stdio server running `npx tc-mcp mcp`.
 
+Not signed in yet (or tokens expired)? Tools fail with a clear "not signed in" message and the agent offers to open the sign-in window for you via the `tc_login` tool - so step 1 is optional; you can also just start asking questions and sign in when prompted.
+
 Then ask your agent things like:
 
 - "What is our outstanding rent balance, by property?"
@@ -32,6 +34,7 @@ Then ask your agent things like:
 | Financials | `get_transaction_statistics`, `create_transaction`, `update_transaction`, `delete_transaction`, `list_recurring_transactions`, `list_payments`, `list_reconciliation_accounts`, `owner_balances` |
 | Leasing | `get_lease`, `update_lease`, `list_lease_notices`, `list_applications`, `list_screenings`, `list_leads`, `create_lead` |
 | Escape hatch | `tc_request` - any of the ~1100 cataloged internal endpoints |
+| Auth | `tc_login` - opens a browser sign-in window when the user is not signed in |
 
 Plus resources: `tc://guide` (usage guide for agents), `tc://catalog` (endpoint catalog), `tc://property/{id}`, `tc://unit/{id}`, `tc://contact/{id}`.
 

@@ -24,9 +24,11 @@ async function main(): Promise<number> {
 
   switch (command?.toLowerCase()) {
     case "mcp": {
+      // No unprompted login windows from the server: interactive login only
+      // happens through the explicit tc_login tool (or the `login` command).
       const provider = new CdpTokenProvider({
         tokenStore: new SecureTokenStore(),
-        allowInteractiveLogin: true,
+        allowInteractiveLogin: false,
       });
       await runServer(provider);
       // Keep the process alive; the stdio transport closes it on disconnect

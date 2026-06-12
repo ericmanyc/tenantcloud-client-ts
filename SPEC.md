@@ -109,6 +109,10 @@ Bearer` + `X-Requested-With: XMLHttpRequest`.
   `resource(endpoint, type)` generic accessor, sub-clients on `client.{messaging,maintenance,
   financials,leasing}`. 204/empty bodies handled.
 - mcp `tools/` modules + `tc_request` escape hatch + `tc://catalog` resource.
+- Auth UX: the server never opens a login window unprompted (`allowInteractiveLogin: false`
+  in `tc-mcp mcp`). A 401/no-token tool failure returns a "not signed in" hint pointing at
+  `tc_login`, a tool (registered when the provider supports `interactiveLogin()`) that opens
+  the browser sign-in on demand and waits for completion.
 
 ## Status
 

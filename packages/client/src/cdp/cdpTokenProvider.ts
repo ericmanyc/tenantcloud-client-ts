@@ -69,6 +69,24 @@ export class CdpTokenProvider implements TcAuthTokenProvider {
     return this.serialized(() => this.getTokenCore(signal));
   }
 
+  /**
+   * Run the interactive browser login flow now, regardless of
+   * `allowInteractiveLogin`. Launches a temporary browser window, waits for
+   * the user to finish signing in, then caches and persists the tokens.
+   * Returns null if the user closed the window, the flow timed out, or no
+   * Chromium browser could be found.
+   */
+  interactiveLogin(signal?: AbortSignal): Promise<TcTokenSet | null> {
+    return this.serialized(async () => {
+      const tokens = await this.tryInteractiveLogin(signal);
+      if (tokens) {
+        this.cached = tokens;
+        await this.persist(tokens);
+      }
+      return tokens;
+    });
+  }
+
   onTokenRejected(rejectedToken: string, signal?: AbortSignal): Promise<void> {
     return this.serialized(async () => {
       if (this.cached?.accessToken !== rejectedToken) {

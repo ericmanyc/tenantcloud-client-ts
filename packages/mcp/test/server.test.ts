@@ -190,16 +190,26 @@ function fakeTenantCloud(): typeof fetch {
   }) as typeof fetch;
 }
 
-async function connectedClient() {
-  const tcClient = new TcClient(new StaticTokenProvider("test-token"), {
-    fetch: fakeTenantCloud(),
-  });
-  const server = createServer(tcClient);
+async function connectedClient(options?: {
+  tokenProvider?: { getToken(): Promise<string | null>; onTokenRejected(): Promise<void> };
+  interactiveLogin?: () => Promise<boolean>;
+}) {
+  const tcClient = new TcClient(
+    (options?.tokenProvider as never) ?? new StaticTokenProvider("test-token"),
+    { fetch: fakeTenantCloud() },
+  );
+  const server = createServer(tcClient, { interactiveLogin: options?.interactiveLogin });
   const client = new Client({ name: "test-client", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return client;
 }
+
+/** A provider for a user who has never signed in. */
+const signedOutProvider = {
+  getToken: () => Promise.resolve<string | null>(null),
+  onTokenRejected: () => Promise.resolve(),
+};
 
 describe("tc-mcp server", () => {
   it("exposes the core, messaging, maintenance, financials, leasing, and generic tools", async () => {
@@ -330,6 +340,74 @@ describe("tc-mcp server", () => {
       role: "admin",
     });
     expect(text).not.toContain("fraud_status");
+  });
+
+  it("tools return a sign-in hint (tc_login) when the user is not signed in", async () => {
+    const client = await connectedClient({
+      tokenProvider: signedOutProvider,
+      interactiveLogin: () => Promise.resolve(true),
+    });
+
+    const result = await client.callTool({ name: "list_properties", arguments: {} });
+    const text = (result.content as Array<{ text: string }>)[0]!.text;
+
+    expect(result.isError).toBe(true);
+    expect(text).toContain("not signed in");
+    expect(text).toContain("tc_login");
+  });
+
+  it("tc_login is only registered when an interactive login is available", async () => {
+    const withLogin = await connectedClient({ interactiveLogin: () => Promise.resolve(true) });
+    const without = await connectedClient();
+
+    expect((await withLogin.listTools()).tools.map((t) => t.name)).toContain("tc_login");
+    expect((await without.listTools()).tools.map((t) => t.name)).not.toContain("tc_login");
+  });
+
+  it("tc_login reports the already-signed-in user without re-running login", async () => {
+    let loginCalls = 0;
+    const client = await connectedClient({
+      interactiveLogin: () => {
+        loginCalls += 1;
+        return Promise.resolve(true);
+      },
+    });
+
+    const result = await client.callTool({ name: "tc_login", arguments: {} });
+    const payload = JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as {
+      alreadySignedIn: boolean;
+      user: { name: string };
+    };
+
+    expect(payload.alreadySignedIn).toBe(true);
+    expect(payload.user.name).toBe("Pat Lee");
+    expect(loginCalls).toBe(0);
+  });
+
+  it("tc_login runs the interactive login for a signed-out user", async () => {
+    let loginCalls = 0;
+    let token: string | null = null;
+    const client = await connectedClient({
+      tokenProvider: {
+        getToken: () => Promise.resolve(token),
+        onTokenRejected: () => Promise.resolve(),
+      },
+      interactiveLogin: () => {
+        loginCalls += 1;
+        token = "fresh-token"; // login stores tokens; subsequent calls succeed
+        return Promise.resolve(true);
+      },
+    });
+
+    const result = await client.callTool({ name: "tc_login", arguments: {} });
+    const payload = JSON.parse((result.content as Array<{ text: string }>)[0]!.text) as {
+      signedIn: boolean;
+      user: { name: string } | null;
+    };
+
+    expect(loginCalls).toBe(1);
+    expect(payload.signedIn).toBe(true);
+    expect(payload.user?.name).toBe("Pat Lee");
   });
 
   it("message_lead creates the lead's thread, then sends to it", async () => {

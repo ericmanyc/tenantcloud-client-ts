@@ -18,10 +18,54 @@ import { registerCrmTools } from "./tools/crm.js";
 import { registerExtraWriteTools } from "./tools/extraWrites.js";
 import { registerGenericTools } from "./tools/generic.js";
 
-export function createServer(client: TcClient): McpServer {
+export interface ServerOptions {
+  /**
+   * When provided, the tc_login tool is registered. The callback runs the
+   * interactive browser sign-in and resolves true once tokens were obtained.
+   */
+  interactiveLogin?: (() => Promise<boolean>) | undefined;
+}
+
+export function createServer(client: TcClient, options: ServerOptions = {}): McpServer {
   const cache = new EntityCache(client);
 
   const server = new McpServer({ name: "tc-mcp", version: VERSION });
+
+  if (options.interactiveLogin) {
+    const interactiveLogin = options.interactiveLogin;
+    server.registerTool(
+      "tc_login",
+      {
+        description:
+          "Open a browser window for the user to sign in to TenantCloud. Use when other tools fail with HTTP 401 / not signed in. TELL THE USER a sign-in window is about to open BEFORE calling this; the call waits (up to several minutes) while they complete the sign-in, then reports who is signed in.",
+        inputSchema: {},
+      },
+      async () => {
+        try {
+          const existing = await client.getUserInfo().catch(() => null);
+          if (existing) {
+            return toolSuccess({
+              alreadySignedIn: true,
+              user: { name: `${existing.firstName} ${existing.lastName}`.trim(), email: existing.email },
+            });
+          }
+          const ok = await interactiveLogin();
+          if (!ok) {
+            return toolError(
+              'Sign-in was not completed: the window was closed, timed out, or no Chromium browser was found. The user can also run "tc-mcp login" in a terminal and retry.',
+            );
+          }
+          const user = await client.getUserInfo().catch(() => null);
+          return toolSuccess({
+            signedIn: true,
+            user: user ? { name: `${user.firstName} ${user.lastName}`.trim(), email: user.email } : null,
+          });
+        } catch (error) {
+          return toolError(error);
+        }
+      },
+    );
+  }
 
   server.registerTool(
     "get_user_info",
@@ -349,7 +393,17 @@ export function createServer(client: TcClient): McpServer {
 }
 
 export async function runServer(tokenProvider: TcAuthTokenProvider): Promise<void> {
-  const server = createServer(new TcClient(tokenProvider));
+  // Providers that support an on-demand browser sign-in (CdpTokenProvider)
+  // get the tc_login tool; detected structurally to avoid a hard dependency
+  // on the cdp subpath.
+  const loginCapable = tokenProvider as TcAuthTokenProvider & {
+    interactiveLogin?: (signal?: AbortSignal) => Promise<unknown>;
+  };
+  const interactiveLogin =
+    typeof loginCapable.interactiveLogin === "function"
+      ? async () => (await loginCapable.interactiveLogin!()) != null
+      : undefined;
+  const server = createServer(new TcClient(tokenProvider), { interactiveLogin });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
