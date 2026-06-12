@@ -3,7 +3,9 @@ import { StaticTokenProvider } from "../src/auth.js";
 import { TcClient } from "../src/tcClient.js";
 import { parseTask } from "../src/resources/productivity.js";
 import { parseFile } from "../src/resources/files.js";
-import { parseJsonApiList } from "../src/resources/jsonApi.js";
+import { parseJsonApiList, normalizeItem } from "../src/resources/jsonApi.js";
+import { parseMaintenanceRequest } from "../src/resources/maintenance.js";
+import { parseTcDateOrNull } from "../src/json.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -45,6 +47,31 @@ describe("productivity & files parsers", () => {
     });
     expect(f).toMatchObject({ id: 8, name: "lease.pdf", ext: "pdf", isImage: false, size: 1234 });
     expect(f.fileUrl).toBe("https://x/lease.pdf");
+  });
+});
+
+describe("real-data robustness (found via live smoke test)", () => {
+  it("parseTcDateOrNull treats [], '', and blanks as null instead of throwing", () => {
+    expect(parseTcDateOrNull([])).toBeNull();
+    expect(parseTcDateOrNull("")).toBeNull();
+    expect(parseTcDateOrNull("   ")).toBeNull();
+    expect(parseTcDateOrNull({})).toBeNull();
+    // a real date string still parses
+    expect(parseTcDateOrNull("2026-06-30")).toBeInstanceOf(Date);
+  });
+
+  it("parseMaintenanceRequest survives an empty-array date field", () => {
+    const r = parseMaintenanceRequest({ id: 1, title: "x", available_on: [], due: [], status: "new" });
+    expect(r.availableOn).toBeNull();
+    expect(r.dueDate).toBeNull();
+  });
+
+  it("normalizeItem treats an empty-string id as 0 (aggregate/statistics resources)", () => {
+    expect(normalizeItem({ type: "transaction_payment_statistics", id: "", attributes: { amount: 5 } })).toEqual({
+      amount: 5,
+      type: "transaction_payment_statistics",
+      id: 0,
+    });
   });
 });
 

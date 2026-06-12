@@ -54,6 +54,12 @@ export function parseTcDateOrNull(value: unknown): Date | null {
   if (value === null || value === undefined) {
     return null;
   }
+  // The API serialises an absent date inconsistently: sometimes null, sometimes
+  // an empty string "", sometimes an empty array [] (a PHP empty-array quirk).
+  // Treat any non-string or blank value as "no date" rather than throwing.
+  if (typeof value !== "string" || value.trim() === "") {
+    return null;
+  }
   const result = tryParseTcDate(value);
   if (result === null) {
     throw new Error(`Unknown date format for ${JSON.stringify(value)}`);

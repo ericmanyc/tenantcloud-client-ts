@@ -54,10 +54,14 @@ interface RawItem {
 
 /** Flatten a JSON:API resource object into `{ id, type, ...attributes }`. */
 export function normalizeItem(item: RawItem): JsonApiRecord {
+  // Aggregate/statistics resources sometimes carry an empty-string id; treat
+  // any missing/blank id as 0 instead of throwing in toNumber.
+  const rawId = item.id;
+  const id = rawId === null || rawId === undefined || rawId === "" ? 0 : toNumber(rawId);
   return {
     ...(item.attributes ?? {}),
     type: String(item.type ?? ""),
-    id: toNumber(item.id ?? 0),
+    id,
   };
 }
 
