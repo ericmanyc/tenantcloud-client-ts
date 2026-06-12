@@ -4,6 +4,22 @@
   "description": "Unofficial TypeScript client for TenantCloud (rental property management). Works against internal endpoints; not an official TenantCloud product.",
   "type": "module",
   "license": "MIT",
+  "author": "Eric Ma",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ericmanyc/tenantcloud-client-ts.git",
+    "directory": "packages/client"
+  },
+  "homepage": "https://github.com/ericmanyc/tenantcloud-client-ts#readme",
+  "bugs": "https://github.com/ericmanyc/tenantcloud-client-ts/issues",
+  "keywords": [
+    "tenantcloud",
+    "property-management",
+    "rental",
+    "landlord",
+    "real-estate",
+    "api-client"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -15,7 +31,8 @@
   ],
   "scripts": {
     "build": "tsc --build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@napi-rs/keyring": "^1.1.0",

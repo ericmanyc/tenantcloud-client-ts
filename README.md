@@ -1,19 +1,23 @@
 # tenantcloud-client-ts
 
-TypeScript port of [yllibed/TenantCloudClient](https://github.com/yllibed/TenantCloudClient): an unofficial toolkit for [TenantCloud](https://tenantcloud.com), a rental property management platform.
+TypeScript client library and MCP server for [TenantCloud](https://tenantcloud.com), a rental property management platform. A port of [yllibed/TenantCloudClient](https://github.com/yllibed/TenantCloudClient) (C#/.NET), extended well beyond parity.
 
-> **This is not an official TenantCloud product.** TenantCloud does not provide a public API; this library works against their internal endpoints and can break whenever TenantCloud changes their frontend.
+> **This is not an official TenantCloud product.** TenantCloud does not provide a public API; this library works against their internal endpoints and can break whenever TenantCloud changes their frontend. Use at your own risk.
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| [`packages/client`](packages/client) (`tenantcloud-client`) | API client, paginated sources with fluent filters, token store abstractions (OS credential store via `@napi-rs/keyring`, file store), CDP token provider (`tenantcloud-client/cdp`) |
-| [`packages/mcp`](packages/mcp) (`tc-mcp`) | MCP server (stdio) exposing TenantCloud data to AI agents, plus `login`/`logout`/`install` CLI |
+| Package | npm | Description |
+|---------|-----|-------------|
+| [`packages/client`](packages/client) | `tenantcloud-client` | API client: typed sub-clients for messaging, maintenance, financials, and leasing; paginated sources with fluent filters; generic JSON:API CRUD; token stores (OS credential store, file); CDP-based browser auth |
+| [`packages/mcp`](packages/mcp) | `tc-mcp` | MCP server (stdio) exposing TenantCloud to AI agents (Claude Desktop, Claude Code, Cursor), with a `login`/`logout`/`install` CLI |
 
 ## Quick start
 
 ### Client library
+
+```bash
+npm install tenantcloud-client
+```
 
 ```ts
 import { TcClient, SecureTokenStore } from "tenantcloud-client";
@@ -25,21 +29,47 @@ const provider = new CdpTokenProvider({
 });
 const tc = new TcClient(provider);
 
+// Reads with fluent filters
 const user = await tc.getUserInfo();
 const tenants = await tc.contacts.onlyTenants().getAll();
-const balances = await tc.transactions.forCategory("income").forStatus("with_balance").getAll();
+const overdue = await tc.transactions.forCategory("income").forStatus("with_balance").getAll();
+
+// Typed sub-clients
+const threads = await tc.messaging.threads("tenant");
+await tc.messaging.sendMessage(threads.items[0].id, "Hi!");
+const request = await tc.maintenance.create({ title: "Leaky faucet", property_id: 123 });
+
+// First contact with a lead (creates their message thread)
+const thread = await tc.leasing.openLeadThread(leadId);
+await tc.messaging.sendMessage(thread.id, "Thanks for your interest!");
+
+// Any other endpoint via generic JSON:API CRUD
+const tasks = tc.resource("/tasks", "task");
+await tasks.create({ title: "Call plumber" });
 ```
 
 ### MCP server
 
 ```bash
-npm run build
-node packages/mcp/dist/cli.js login                 # browser-based sign-in, tokens go to the OS credential store
-node packages/mcp/dist/cli.js install claude-code   # register with Claude Code
-node packages/mcp/dist/cli.js install claude-desktop
+npx tc-mcp login                 # browser-based sign-in; tokens go to the OS credential store
+npx tc-mcp install claude-code   # register with Claude Code
+npx tc-mcp install claude-desktop
 ```
 
-Tools: `get_user_info`, `list_contacts`, `list_properties`, `list_units`, `list_transactions`, `list_leases`. Resources: `tc://guide`, `tc://property/{id}`, `tc://unit/{id}`, `tc://contact/{id}`.
+Then ask your agent things like "who owes rent?", "message the lead who inquired yesterday", or "create a maintenance request for unit 3B".
+
+## MCP tools
+
+35 tools across six areas, plus resources `tc://guide`, `tc://catalog`, `tc://property/{id}`, `tc://unit/{id}`, `tc://contact/{id}`:
+
+- **Core reads**: `get_user_info`, `list_contacts`, `list_properties`, `list_units`, `list_transactions`, `list_leases`
+- **Messaging**: `list_message_channels`, `list_threads`, `find_threads`, `list_messages`, `send_message`, `message_lead` (first contact with a lead: creates their thread and sends in one step), `mark_thread_read`
+- **Maintenance**: `list_maintenance_requests`, `get_maintenance_request`, `create_maintenance_request`, `update_maintenance_request`, `resolve_maintenance_request`, `list_inspections`
+- **Financials**: `get_transaction_statistics`, `create_transaction`, `update_transaction`, `delete_transaction`, `list_recurring_transactions`, `list_payments`, `list_reconciliation_accounts`, `owner_balances`
+- **Leasing**: `get_lease`, `update_lease`, `list_lease_notices`, `list_applications`, `list_screenings`, `list_leads`, `create_lead`
+- **Escape hatch**: `tc_request` (any of the ~1100 cataloged endpoints; see `tc://catalog`)
+
+Tool responses resolve foreign-key IDs to human-readable names via an entity cache, and messenger payloads are slimmed so they fit agent context windows.
 
 ## How authentication works
 
@@ -59,8 +89,8 @@ npm test           # vitest (unit + MCP in-memory transport tests)
 TC_AUTH_TOKEN=<jwt> npm test   # also runs live API integration tests
 ```
 
-See [SPEC.md](SPEC.md) for the design decisions and the documented internal API surface.
+See [SPEC.md](SPEC.md) for design decisions and the documented internal API surface (~1100 endpoints, discovered from the SPA bundle; full list in [docs/api-catalog.txt](docs/api-catalog.txt)).
 
 ## License
 
-MIT
+[MIT](LICENSE). Portions derived from [yllibed/TenantCloudClient](https://github.com/yllibed/TenantCloudClient), copyright Carl de Billy, MIT.

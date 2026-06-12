@@ -4,6 +4,22 @@
   "description": "MCP server exposing TenantCloud data to AI agents (Claude Desktop, Claude Code, Cursor). Unofficial.",
   "type": "module",
   "license": "MIT",
+  "author": "Eric Ma",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ericmanyc/tenantcloud-client-ts.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/ericmanyc/tenantcloud-client-ts#readme",
+  "bugs": "https://github.com/ericmanyc/tenantcloud-client-ts/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "tenantcloud",
+    "claude",
+    "ai-agent",
+    "property-management"
+  ],
   "bin": {
     "tc-mcp": "./dist/cli.js"
   },
@@ -12,7 +28,8 @@
   ],
   "scripts": {
     "build": "tsc --build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.15.0",
