@@ -50,15 +50,13 @@ await tasks.create({ title: "Call plumber" });
 
 ### MCP server
 
+One command (needs Node 20+):
+
 ```bash
-npx tc-mcp login                 # browser-based sign-in; tokens go to the OS credential store
-npx tc-mcp install claude-code   # register with Claude Code
-npx tc-mcp install claude-desktop
+npx tc-mcp install claude-code   # or: claude-desktop
 ```
 
-Then ask your agent things like "who owes rent?", "message the lead who inquired yesterday", or "create a maintenance request for unit 3B".
-
-If you skip `login` (or tokens expire), tools fail with a clear "not signed in" message and the agent offers to open a browser sign-in window via the `tc_login` tool.
+Restart Claude Code and ask things like "who owes rent?", "message the lead who inquired yesterday", or "create a maintenance request for unit 3B". The first time, the agent notices you are not signed in and offers to open a TenantCloud sign-in window (normal password + 2FA); tokens go to your OS credential store. To sign in ahead of time instead: `npx tc-mcp login`.
 
 ## MCP tools
 
