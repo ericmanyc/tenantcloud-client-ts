@@ -1,38 +1,22 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import {
-  TcClient,
-  TcClientError,
-  validEmails,
-  validPhones,
-  type TcAuthTokenProvider,
-} from "tenantcloud-client";
+import { TcClient, validEmails, validPhones, type TcAuthTokenProvider } from "tenantcloud-client";
 import { EntityCache } from "./entityCache.js";
 import { enrich } from "./entityEnricher.js";
 import { GUIDE } from "./guide.js";
+import { CATALOG } from "./catalog.js";
 import { VERSION } from "./version.js";
-
-function toolSuccess(payload: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(payload) }] };
-}
-
-function toolError(error: unknown) {
-  const message =
-    error instanceof TcClientError
-      ? `${error.message} (HTTP ${error.httpStatus})`
-      : error instanceof Error
-        ? error.message
-        : String(error);
-  return { content: [{ type: "text" as const, text: message }], isError: true };
-}
-
-const maxResultsParam = z
-  .number()
-  .int()
-  .positive()
-  .optional()
-  .describe("Maximum number of results to return (default 100)");
+import { maxResultsParam, toolError, toolSuccess } from "./tools/helpers.js";
+import { registerMessagingTools } from "./tools/messaging.js";
+import { registerMaintenanceTools } from "./tools/maintenance.js";
+import { registerFinancialsTools } from "./tools/financials.js";
+import { registerLeasingTools } from "./tools/leasing.js";
+import { registerProductivityTools } from "./tools/productivity.js";
+import { registerDocumentTools } from "./tools/documents.js";
+import { registerCrmTools } from "./tools/crm.js";
+import { registerExtraWriteTools } from "./tools/extraWrites.js";
+import { registerGenericTools } from "./tools/generic.js";
 
 export function createServer(client: TcClient): McpServer {
   const cache = new EntityCache(client);
@@ -62,7 +46,7 @@ export function createServer(client: TcClient): McpServer {
     "list_contacts",
     {
       description:
-        "List contacts (tenants, professionals) from TenantCloud. Use 'role' to filter by type.",
+        "List contacts (tenants, professionals) from TenantCloud. Use 'role' to filter by type. Team members/sub-admins are NOT contacts - find them with find_threads or list_threads on the 'admins' channel.",
       inputSchema: {
         role: z
           .enum(["tenant", "professional", "moved_in", "archived"])
@@ -239,6 +223,17 @@ export function createServer(client: TcClient): McpServer {
     },
   );
 
+  // Messaging, maintenance, financials, leasing, and the generic escape hatch.
+  registerMessagingTools(server, client);
+  registerMaintenanceTools(server, client, cache);
+  registerFinancialsTools(server, client, cache);
+  registerLeasingTools(server, client, cache);
+  registerProductivityTools(server, client);
+  registerDocumentTools(server, client);
+  registerCrmTools(server, client);
+  registerExtraWriteTools(server, client);
+  registerGenericTools(server, client);
+
   server.registerResource(
     "guide",
     "tc://guide",
@@ -250,6 +245,20 @@ export function createServer(client: TcClient): McpServer {
     },
     (uri) => ({
       contents: [{ uri: uri.href, mimeType: "text/markdown", text: GUIDE }],
+    }),
+  );
+
+  server.registerResource(
+    "catalog",
+    "tc://catalog",
+    {
+      title: "TenantCloud API endpoint catalog",
+      description:
+        "List of API endpoint paths and JSON:API resource types, for use with the tc_request escape-hatch tool.",
+      mimeType: "text/markdown",
+    },
+    (uri) => ({
+      contents: [{ uri: uri.href, mimeType: "text/markdown", text: CATALOG }],
     }),
   );
 

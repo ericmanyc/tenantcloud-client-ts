@@ -177,4 +177,64 @@ Always resolve names to IDs first, then use the appropriate filters.
 - "What leases are on unit [name]?" -> resolve unit -> \`list_leases\` with \`unitId\`
 - "Show all expenses for [property]" -> resolve property -> \`list_transactions\` with \`propertyId\` + \`category=expense\`
 - "Who am I logged in as?" -> \`get_user_info\`
+
+## Messaging, Maintenance, Financials, Leasing
+
+Beyond the read tools above, these write-capable tools cover the core workflows.
+Resolve names to IDs first (same patterns as above) before calling them.
+
+### Messaging (Messenger)
+- \`find_threads\` (\`query\`, \`channel\`?) - locate threads by participant name/email across channels
+- \`list_message_channels\` - channels and unread flags
+- \`list_threads\` (\`channel\`: tenant, owner, professional, client, leads, maintenance_requests, ...) - conversations
+- \`list_messages\` (\`threadId\`) - messages in a thread
+- \`send_message\` (\`threadId\`, \`body\`) - **delivers to the other participant; confirm intent first**
+- \`message_lead\` (\`leadId\`, \`body\`) - message a lead, creating their thread if none exists yet
+- \`mark_thread_read\` (\`threadId\`)
+
+**Messaging a person by name** -> call \`find_threads\` with their name -> use the matched
+thread's \`id\` with \`send_message\`. Do NOT page through \`list_threads\` manually.
+Team members/sub-admins are not in \`list_contacts\`; their threads are in the \`admins\`
+channel. Prospective tenants are in the \`leads\` channel.
+
+**Messaging a lead (first contact)** -> a lead who has never been messaged has NO thread,
+so \`find_threads\` returns nothing for them. Resolve the lead via \`list_leads\` -> call
+\`message_lead\` with the lead's \`id\`; it creates the thread and sends in one step.
+
+### Maintenance
+- \`list_maintenance_requests\` (filters: \`propertyId\`, \`clientId\`, \`status\`, \`priority\`, \`assigneeId\`)
+- \`get_maintenance_request\` (\`id\`)
+- \`create_maintenance_request\` (\`title\`, \`text\`, \`propertyId\`, \`priority\`, ...)
+- \`update_maintenance_request\` (\`id\`, ...) / \`resolve_maintenance_request\` (\`id\`)
+- \`add_maintenance_material\` (\`requestId\`, \`name\`, \`cost\`)
+- \`list_inspections\`
+
+### Financials
+- \`get_transaction_statistics\` (filters) - income/expense/balance aggregates
+- \`create_transaction\` / \`update_transaction\` / \`delete_transaction\` - charges and expenses
+- \`record_payment\` (\`amount\`, \`clientId\`, \`transactionId\`) - record a payment received
+- \`create_recurring_transaction\` - schedule a recurring rent charge or expense
+- \`list_recurring_transactions\`, \`list_payments\` (filter by \`clientId\`/\`propertyId\`)
+- \`list_reconciliation_accounts\`, \`owner_balances\`, \`list_owner_agreements\`
+
+### Leasing
+- \`get_lease\` (\`id\`) / \`update_lease\` (\`id\`, rent/dates) / \`create_lease\` (\`unitId\`, \`tenantId\`, rent)
+- \`add_lease_roommate\` (\`leaseId\`, name) / \`create_lease_notice\` (\`leaseId\`, \`type\`, \`text\`)
+- \`list_lease_notices\` (\`leaseId\`)
+- \`list_applications\` / \`create_application\` / \`submit_application\` (\`id\`)
+- \`list_screenings\` / \`create_screening\` (may incur a fee) / \`cancel_screening\`
+- \`list_leads\`, \`create_lead\`
+
+### Productivity, Documents & Contacts
+- \`list_tasks\`, \`create_task\` (\`title\`, \`remindDate\` required), \`complete_task\`, \`delete_task\`
+- \`list_calendar_events\` (date range); \`list_notes\` / \`create_note\` (entity-scoped: \`noteableType\` + \`noteableId\`)
+- \`list_files\`, \`get_file\` (returns a download URL)
+- \`create_contact\` / \`update_contact\` / \`invite_contact\` (sends a portal invite - confirm first)
+- \`list_contact_insurances\`
+
+### Anything else: \`tc_request\`
+For any endpoint without a dedicated tool, use \`tc_request\` (\`method\`, \`path\`, \`query\`, \`body\`).
+Read the \`tc://catalog\` resource for the full list of endpoint paths and JSON:API resource
+types. Most resources are JSON:API: create with \`POST\` and body
+\`{ "data": { "type": "<type>", "attributes": { ... } } }\`; update with \`PATCH /<endpoint>/<id>\`.
 `;

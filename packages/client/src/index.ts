@@ -53,5 +53,46 @@ export {
   type PageGetter,
 } from "./paginatedSource.js";
 export { TcClient, type TcClientOptions } from "./tcClient.js";
+export {
+  JsonApiResourceClient,
+  jsonApiBody,
+  normalizeItem,
+  parseJsonApiList,
+  parseJsonApiOne,
+  parseLaravelList,
+  withQuery,
+  type HttpMethod,
+  type JsonApiList,
+  type JsonApiRecord,
+  type PageInfo,
+  type RequestOptions,
+  type TcHttp,
+} from "./resources/jsonApi.js";
+export {
+  MessengerClient,
+  MESSENGER_CHANNELS,
+  parseMessage,
+  parseThread,
+  type MessengerChannel,
+  type TcMessage,
+  type TcPage,
+  type TcThread,
+} from "./resources/messaging.js";
+export {
+  MaintenanceClient,
+  parseMaintenanceRequest,
+  type MaintenanceListOptions,
+  type TcMaintenanceRequest,
+} from "./resources/maintenance.js";
+export { FinancialsClient } from "./resources/financials.js";
+export {
+  LeasingClient,
+  parseLead,
+  type RenterProfileKind,
+  type TcLead,
+} from "./resources/leasing.js";
+export { ProductivityClient, parseTask, type TcTask } from "./resources/productivity.js";
+export { FilesClient, parseFile, type TcFile } from "./resources/files.js";
+export { ContactsClient } from "./resources/contacts.js";
 export { FileTokenStore } from "./store/fileTokenStore.js";
 export { SecureTokenStore, type SecureTokenStoreOptions } from "./store/secureTokenStore.js";

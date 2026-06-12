@@ -20,14 +20,14 @@ function pageBody(ids: number[], total: number) {
 describe("TcClient", () => {
   it("sends bearer token and parses user info", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse({ user: { id: 7, firstName: "Eric", lastName: "Ma", email: "e@x.com" } }),
+      jsonResponse({ user: { id: 7, firstName: "Pat", lastName: "Lee", email: "pat@example.com" } }),
     );
     const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
 
     const user = await client.getUserInfo();
 
     expect(user?.id).toBe(7);
-    expect(user?.firstName).toBe("Eric");
+    expect(user?.firstName).toBe("Pat");
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe("https://api.tenantcloud.com/auth/user");
     expect(init.headers.Authorization).toBe("Bearer tok");
