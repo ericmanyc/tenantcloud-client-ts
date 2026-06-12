@@ -8,12 +8,19 @@ local stdio server.
 
 ## 1. Deploy
 
-1. Create a Railway project from this GitHub repo. `railway.json` already sets
+(Deploying for your own company? Fork this repo first so Railway deploys from
+your GitHub account, and run your own `tc-mcp serve` - every company hosts its
+own instance with its own vault. There is no multi-company mode by design.)
+
+1. Create a Railway project from the GitHub repo. `railway.json` already sets
    the build (`npm install && npm run build`) and start
    (`node packages/mcp/dist/cli.js serve`) commands.
 2. Add a **PostgreSQL** service to the project and attach its `DATABASE_URL`
    to the app service (Railway does this automatically when you reference it).
-3. Set the app service variables:
+   You will need a paid Railway plan (Hobby) - the free tier's resource quota
+   does not fit an always-on service plus Postgres.
+3. Generate the app's public domain first (Settings -> Networking -> Generate
+   Domain) - `BASE_URL` below needs it. Then set the app service variables:
 
    | Variable | Value |
    |----------|-------|
@@ -22,7 +29,35 @@ local stdio server.
    | `TC_ADMIN_KEY` | `openssl rand -hex 32` - bearer key for the /admin endpoints (invites, revocation) |
    | `DATABASE_URL` | reference to the Postgres service |
 
-4. Deploy. `GET /healthz` should return `{"ok":true}`.
+4. Deploy. `GET /healthz` should return `{"ok":true}`, and the deploy logs
+   should say `Connected to Postgres.`
+
+### CLI alternative
+
+```bash
+brew install railway && railway login
+railway init --name tenantcloud-mcp
+railway add --database postgres
+railway add --service tc-mcp-server --repo <your-fork> --branch main \
+  -v "TC_VAULT_KEY=$(openssl rand -hex 32)" \
+  -v "TC_ADMIN_KEY=$(openssl rand -hex 32)" \
+  -v 'DATABASE_URL=${{Postgres.DATABASE_URL}}'
+railway service link tc-mcp-server && railway domain
+railway variables --set "BASE_URL=https://<the printed domain>"
+```
+
+### Troubleshooting
+
+- **First deploy fails its healthcheck / crash-loops**: usually the app booted
+  before Postgres finished provisioning (the server connects at startup).
+  Wait for the Postgres service to show Online, then redeploy the app.
+- **Build warnings** `SecretsUsedInArgOrEnv` and `UndefinedVar '$NIXPACKS_PATH'`
+  are benign: Railway's Nixpacks builder passes service variables into the
+  Docker build (so Docker's linter flags the *_KEY names) and its generated
+  Dockerfile references its own variable. Neither blocks the build.
+- **Log says "using in-memory storage"**: the `DATABASE_URL` reference is not
+  attached to the app service - pairings would vanish on restart. Fix the
+  variable reference and redeploy.
 
 ## 2. Invite a teammate (admin)
 

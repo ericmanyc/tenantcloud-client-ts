@@ -60,7 +60,9 @@ Restart Claude Code and ask things like "who owes rent?", "message the lead who 
 
 ### Hosted server (Claude on web, teams)
 
-For teammates on claude.ai, `tc-mcp serve` runs a multi-user remote server: OAuth 2.1 in front (claude.ai custom connector flow, email + invite code), an encrypted per-user TenantCloud token vault in Postgres, and per-person pairing via `tc-mcp login --remote`. Each teammate's tool calls run under their own TenantCloud account and permissions. See [docs/DEPLOY_RAILWAY.md](docs/DEPLOY_RAILWAY.md).
+For teammates on claude.ai, `tc-mcp serve` runs a multi-user remote server: OAuth 2.1 in front (claude.ai custom connector flow, email + invite code), an encrypted per-user TenantCloud token vault in Postgres, and per-person pairing via `tc-mcp login --remote`. Each teammate's tool calls run under their own TenantCloud account and permissions.
+
+Each company hosts its own instance (fork or clone this repo - there is no shared multi-company server by design). Step-by-step Railway guide, including CLI commands and troubleshooting: [docs/DEPLOY_RAILWAY.md](docs/DEPLOY_RAILWAY.md).
 
 ## MCP tools
 
