@@ -1,0 +1,30 @@
+{
+  "name": "tenantcloud-client",
+  "version": "0.1.0",
+  "description": "Unofficial TypeScript client for TenantCloud (rental property management). Works against internal endpoints; not an official TenantCloud product.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./cdp": "./dist/cdp/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "^1.1.0",
+    "chrome-remote-interface": "^0.33.0"
+  },
+  "devDependencies": {
+    "@types/chrome-remote-interface": "^0.31.14"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

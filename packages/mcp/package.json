@@ -1,0 +1,25 @@
+{
+  "name": "tc-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing TenantCloud data to AI agents (Claude Desktop, Claude Code, Cursor). Unofficial.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "tc-mcp": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.0",
+    "tenantcloud-client": "^0.1.0",
+    "zod": "^3.25.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
