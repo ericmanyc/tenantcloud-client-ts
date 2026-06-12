@@ -135,6 +135,22 @@ describe("remote HTTP server", () => {
     expect(res.status).toBe(401);
   });
 
+  it("answers an invalid/stale bearer token with 401 + WWW-Authenticate, not 500", async () => {
+    // Regression: plain Errors from verifyAccessToken became 500s, so clients
+    // (claude.ai) never saw the 401 that triggers their OAuth re-auth flow.
+    const res = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        Authorization: "Bearer tca_dead_token_from_before_a_wipe",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toContain("Bearer");
+  });
+
   it("runs the full flow: invite -> pair -> OAuth (DCR + PKCE) -> MCP session", async () => {
     const inviteCode = await inviteUser("alice@co.com");
 

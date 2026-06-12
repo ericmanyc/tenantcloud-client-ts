@@ -6,6 +6,10 @@ import type {
 import type { OAuthRegisteredClientsStore } from "@modelcontextprotocol/sdk/server/auth/clients.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type { OAuthClientInformationFull, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
+import {
+  InvalidGrantError,
+  InvalidTokenError,
+} from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { randomSecret, sha256hex } from "./crypto.js";
 import type { RemoteStore } from "./store.js";
 
@@ -156,7 +160,7 @@ export class VaultOAuthProvider implements OAuthServerProvider {
     // Peek without consuming: the SDK verifies PKCE before exchanging.
     const record = await this.store.takeAuthCode(authorizationCode);
     if (!record || record.expiresAt < Date.now()) {
-      throw new Error("invalid or expired authorization code");
+      throw new InvalidGrantError("invalid or expired authorization code");
     }
     // Re-store so the subsequent exchange can consume it.
     await this.store.saveAuthCode(authorizationCode, record);
@@ -169,7 +173,7 @@ export class VaultOAuthProvider implements OAuthServerProvider {
   ): Promise<OAuthTokens> {
     const record = await this.store.takeAuthCode(authorizationCode);
     if (!record || record.expiresAt < Date.now() || record.clientId !== client.client_id) {
-      throw new Error("invalid or expired authorization code");
+      throw new InvalidGrantError("invalid or expired authorization code");
     }
     return this.issueTokens(record.userId, client.client_id);
   }
@@ -186,7 +190,7 @@ export class VaultOAuthProvider implements OAuthServerProvider {
       grant.clientId !== client.client_id ||
       grant.expiresAt < Date.now()
     ) {
-      throw new Error("invalid or expired refresh token");
+      throw new InvalidGrantError("invalid or expired refresh token");
     }
     // Rotate the refresh token on every use.
     await this.store.deleteGrant(hash);
@@ -196,7 +200,10 @@ export class VaultOAuthProvider implements OAuthServerProvider {
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const grant = await this.store.getGrant(sha256hex(token));
     if (!grant || grant.kind !== "access" || grant.expiresAt < Date.now()) {
-      throw new Error("invalid or expired access token");
+      // Must be InvalidTokenError: the SDK's bearer middleware turns it into
+      // a 401 + WWW-Authenticate, which is what makes clients re-run OAuth.
+      // Anything else becomes a 500 and clients give up instead.
+      throw new InvalidTokenError("invalid or expired access token");
     }
     return {
       token,
