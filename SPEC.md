@@ -127,9 +127,14 @@ Bearer` + `X-Requested-With: XMLHttpRequest`.
       contact writes type=`userClient` (client.crm), owner agreements (financials)**
 - [x] **exposed existing writes as tools: create_lease, record_payment, create/submit_application,
       create/cancel_screening, add_lease_roommate, create_lease_notice, add_maintenance_material**
-- [x] tests green (63), build green; write path verified live (tasks 201/200/204)
+- [x] tests green (73), build green; write path verified live (tasks 201/200/204)
 - [x] adversarial multi-agent correctness review of the new surface
-- [ ] live end-to-end MCP run against real session for the new tools
+- [x] **live end-to-end read smoke (scripts/smoke.mjs): 19/21 methods OK against real data
+      (82 tasks, 657 leads, 50 files). Caught + fixed 2 real-data crashes:**
+      - parseTcDateOrNull threw on `[]` date (PHP empty-array) -> now lenient
+      - normalizeItem threw on empty-string id (aggregate stats) -> coerces to 0
+- [ ] known server/permission limits (not code bugs): `/transactions/accounts` returns 500
+      on a bare call; `/owner/statistics/balances` 403 for non-owner accounts
 - [ ] notes/documents are entity-scoped (need parent filters); reachable via tc_request
 - [ ] remaining breadth: listings (user-owned), payments/stripe-connect, inspections records,
       renter-profile tools, property sub-resources (keys/equipment/specs)
