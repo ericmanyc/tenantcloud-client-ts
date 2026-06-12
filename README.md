@@ -58,6 +58,10 @@ npx tc-mcp install claude-code   # or: claude-desktop
 
 Restart Claude Code and ask things like "who owes rent?", "message the lead who inquired yesterday", or "create a maintenance request for unit 3B". The first time, the agent notices you are not signed in and offers to open a TenantCloud sign-in window (normal password + 2FA); tokens go to your OS credential store. To sign in ahead of time instead: `npx tc-mcp login`.
 
+### Hosted server (Claude on web, teams)
+
+For teammates on claude.ai, `tc-mcp serve` runs a multi-user remote server: OAuth 2.1 in front (claude.ai custom connector flow, email + invite code), an encrypted per-user TenantCloud token vault in Postgres, and per-person pairing via `tc-mcp login --remote`. Each teammate's tool calls run under their own TenantCloud account and permissions. See [docs/DEPLOY_RAILWAY.md](docs/DEPLOY_RAILWAY.md).
+
 ## MCP tools
 
 35 tools across six areas, plus resources `tc://guide`, `tc://catalog`, `tc://property/{id}`, `tc://unit/{id}`, `tc://contact/{id}`:

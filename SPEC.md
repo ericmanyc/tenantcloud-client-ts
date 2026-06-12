@@ -113,6 +113,16 @@ Bearer` + `X-Requested-With: XMLHttpRequest`.
   in `tc-mcp mcp`). A 401/no-token tool failure returns a "not signed in" hint pointing at
   `tc_login`, a tool (registered when the provider supports `interactiveLogin()`) that opens
   the browser sign-in on demand and waits for completion.
+- Hosted multi-user server (`tc-mcp serve`, mcp/src/remote/): Streamable HTTP `/mcp` behind
+  OAuth 2.1 (SDK `mcpAuthRouter` + custom `VaultOAuthProvider`: DCR, PKCE, opaque tokens
+  stored hashed; login page = email + admin invite code). Per-user TenantCloud tokens in an
+  AES-256-GCM vault (`TC_VAULT_KEY`) on Postgres (`PgRemoteStore`; `MemoryRemoteStore` for
+  dev/tests). `VaultTokenProvider` serializes per-user refresh (TC rotates refresh tokens -
+  persist-before-use; single instance only) + daily keep-alive. Pairing: admin `tc-mcp invite`
+  -> teammate `tc-mcp login --remote <url>` (local browser login, POST /pair). Offboarding:
+  POST /admin/revoke. Deploy: railway.json + docs/DEPLOY_RAILWAY.md. NOT YET verified live:
+  whether TC tolerates many accounts refreshing from one datacenter IP; refresh-token TTL
+  when idle (keep-alive mitigates).
 
 ## Status
 

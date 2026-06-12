@@ -41,13 +41,20 @@ Plus resources: `tc://guide` (usage guide for agents), `tc://catalog` (endpoint 
 
 Quality-of-life for agents: responses resolve foreign-key IDs to names via an entity cache, messenger payloads are slimmed to fit context windows, and `message_lead` handles first contact with a lead (creates their thread and sends in one step).
 
+## Hosted server (Claude on web, teams)
+
+`tc-mcp serve` runs a multi-user remote MCP server for claude.ai custom connectors: OAuth 2.1 with dynamic client registration (teammates sign in with email + admin-issued invite code), an AES-256-GCM-encrypted per-user TenantCloud token vault (Postgres), and one-time pairing via `tc-mcp login --remote <url>` so every person acts under their own TenantCloud account. Deployment guide: [docs/DEPLOY_RAILWAY.md](https://github.com/ericmanyc/tenantcloud-client-ts/blob/main/docs/DEPLOY_RAILWAY.md).
+
 ## CLI
 
 ```bash
 tc-mcp mcp         # run the stdio MCP server (what your MCP client invokes)
 tc-mcp login       # interactive browser sign-in, stores tokens securely
+tc-mcp login --remote <url> --email <e> --code <c>   # pair with a hosted server
 tc-mcp logout      # remove stored tokens
 tc-mcp install claude-code|claude-desktop
+tc-mcp serve       # run the hosted multi-user server (BASE_URL, TC_VAULT_KEY, TC_ADMIN_KEY, DATABASE_URL)
+tc-mcp invite <email> --server <url>                 # admin: invite a teammate
 ```
 
 ## License

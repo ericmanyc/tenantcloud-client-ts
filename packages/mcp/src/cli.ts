@@ -14,9 +14,14 @@ function printHelp(): void {
   console.log("Commands:");
   console.log("  mcp                       Start the MCP server (stdio transport)");
   console.log("  login                     Authenticate and store tokens");
+  console.log("  login --remote <url> --email <e> --code <c>");
+  console.log("                            Pair your TenantCloud account with a hosted server");
   console.log("  logout                    Remove stored tokens");
   console.log("  install claude-desktop    Register in Claude Desktop config");
   console.log("  install claude-code       Register in Claude Code via CLI");
+  console.log("  serve                     Run the hosted multi-user server (Railway etc.)");
+  console.log("  invite <email> --server <url>");
+  console.log("                            Admin: invite a teammate to a hosted server");
 }
 
 async function main(): Promise<number> {
@@ -34,12 +39,26 @@ async function main(): Promise<number> {
       // Keep the process alive; the stdio transport closes it on disconnect
       return new Promise<number>(() => {});
     }
-    case "login":
+    case "login": {
+      if (rest.includes("--remote")) {
+        const { pairWithRemote, parseFlags } = await import("./remote/cliCommands.js");
+        const { flags } = parseFlags(rest);
+        return pairWithRemote(flags["remote"] ?? "", flags["email"] ?? "", flags["code"] ?? "");
+      }
       return login();
+    }
     case "logout":
       return logout();
     case "install":
       return install(rest[0]);
+    case "serve": {
+      const { serve } = await import("./remote/serveCommand.js");
+      return serve();
+    }
+    case "invite": {
+      const { inviteTeammate } = await import("./remote/cliCommands.js");
+      return inviteTeammate(rest);
+    }
     case undefined:
       printHelp();
       return 0;

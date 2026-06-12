@@ -5,16 +5,22 @@ export function toolSuccess(payload: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(payload) }] };
 }
 
+let signInHint =
+  "Tell them, then offer to open a browser sign-in window via the tc_login tool. " +
+  'Alternatively they can run "tc-mcp login" in a terminal and retry.';
+
+/** Override the guidance appended to 401 errors (the hosted server points users at re-pairing instead of tc_login). */
+export function setSignInHint(hint: string): void {
+  signInHint = hint;
+}
+
 export function toolError(error: unknown) {
   if (error instanceof TcClientError && error.httpStatus === 401) {
     return {
       content: [
         {
           type: "text" as const,
-          text:
-            `${error.message} (HTTP 401). The user is not signed in to TenantCloud. ` +
-            "Tell them, then offer to open a browser sign-in window via the tc_login tool. " +
-            'Alternatively they can run "tc-mcp login" in a terminal and retry.',
+          text: `${error.message} (HTTP 401). The user is not signed in to TenantCloud. ${signInHint}`,
         },
       ],
       isError: true,
