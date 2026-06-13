@@ -8,13 +8,23 @@ local stdio server.
 
 ## 1. Deploy
 
-(Deploying for your own company? Fork this repo first so Railway deploys from
-your GitHub account, and run your own `tc-mcp serve` - every company hosts its
-own instance with its own vault. There is no multi-company mode by design.)
+Every company hosts its own instance with its own vault - there is no
+multi-company mode by design. Pick one of two ways to deploy your own:
 
-1. Create a Railway project from the GitHub repo. `railway.json` already sets
-   the build (`npm install && npm run build`) and start
-   (`node packages/mcp/dist/cli.js serve`) commands.
+- **From local, no GitHub link (recommended for self-hosting)** - `railway up`
+  uploads your working copy and Railway builds it. Nothing is tied to a repo, so
+  repo pushes never trigger deploys and your Railway project never shows up on
+  the public GitHub repo. You ship explicitly. See [CLI deploy](#cli-deploy-no-github-link).
+- **From a GitHub fork (auto-deploy on push)** - fork this repo into your own
+  account first, then connect that fork in Railway. Use a fork, not the public
+  upstream, so your deployments stay under your account.
+
+Either way, `railway.json` already sets the build (`npm install && npm run
+build`) and start (`node packages/mcp/dist/cli.js serve`) commands. The Postgres
+and env-var setup below is the same for both:
+
+1. Create a Railway project - empty (you will `railway up` from local) or
+   connected to your fork (auto-deploy on push).
 2. Add a **PostgreSQL** service to the project and attach its `DATABASE_URL`
    to the app service (Railway does this automatically when you reference it).
    You will need a paid Railway plan (Hobby) - the free tier's resource quota
@@ -32,19 +42,35 @@ own instance with its own vault. There is no multi-company mode by design.)
 4. Deploy. `GET /healthz` should return `{"ok":true}`, and the deploy logs
    should say `Connected to Postgres.`
 
-### CLI alternative
+### CLI deploy (no GitHub link)
+
+Provision the project, set the variables, and deploy your local working copy -
+no GitHub connection, so nothing deploys on push and your Railway project stays
+off the public repo:
 
 ```bash
 brew install railway && railway login
 railway init --name tenantcloud-mcp
 railway add --database postgres
-railway add --service tc-mcp-server --repo <your-fork> --branch main \
+railway add --service tc-mcp-server \
   -v "TC_VAULT_KEY=$(openssl rand -hex 32)" \
   -v "TC_ADMIN_KEY=$(openssl rand -hex 32)" \
   -v 'DATABASE_URL=${{Postgres.DATABASE_URL}}'
 railway service link tc-mcp-server && railway domain
 railway variables --set "BASE_URL=https://<the printed domain>"
+railway up        # builds + deploys the current directory
 ```
+
+Ship every later change the same way: `railway up` from the repo directory
+(`.gitignore` keeps `node_modules`/`dist` out of the upload; Railway rebuilds).
+`railway logs` follows the deploy.
+
+**Already connected a GitHub repo and want to switch to CLI-only?** Cut the link
+with `railway service source disconnect --service tc-mcp-server`, then deploy
+with `railway up`. Existing Postgres, domain, and env vars are unaffected. To
+also clear the deployment records Railway posted onto a public repo, delete them
+from the repo's **Settings -> Environments** (and remove the Railway GitHub App
+from the repo at **github.com/settings/installations**).
 
 ### Troubleshooting
 
