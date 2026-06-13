@@ -274,13 +274,15 @@ lead status yourself after fetching.
 
 ### Leasing
 - \`get_lease\` (\`id\`) / \`update_lease\` (\`id\`, rent/dates) / \`create_lease\` (\`unitId\`, \`tenantId\`, rent)
+- \`get_lease_signing_status\` (\`leaseId\`) - is the lease/renewal signed, and by whom
 
-**Lease signing status** is NOT on the lease itself - it lives on each
-\`lease_roommate\` record (fetch with the lease's roommates included). For a
-roommate: \`is_signature_required: true\` means they must sign; \`steps_info.agreement\`
-is \`true\` once they have signed and \`false\` while unsigned; \`is_shared: true\` means
-the lease was sent to them. So a future lease with \`is_signature_required: true\`
-and \`agreement: false\` is a renewal that has NOT been signed yet.
+**Lease signing status**: use \`get_lease_signing_status\` for "is this lease
+signed?" questions. Signing is NOT on the lease record - it lives on each
+\`lease_roommate\` (\`is_signature_required\` = must sign; \`steps_info.agreement\` =
+signed once \`true\`; \`is_shared\` = lease was sent to them). The tool fetches the
+roommates, resolves signer names, and returns a per-roommate state
+(signed / not_signed / not_required) plus \`pendingSigners\` and a summary. A
+future lease that still requires signatures is an unsigned renewal.
 - \`add_lease_roommate\` (\`leaseId\`, name) / \`create_lease_notice\` (\`leaseId\`, \`type\`, \`text\`)
 - \`list_lease_notices\` (\`leaseId\`)
 - \`list_applications\` / \`create_application\` / \`submit_application\` (\`id\`)

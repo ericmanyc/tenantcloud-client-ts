@@ -100,6 +100,8 @@ export {
   parseLead,
   type RenterProfileKind,
   type TcLead,
+  type TcLeaseRoommate,
+  type TcLeaseSigning,
 } from "./resources/leasing.js";
 export { ProductivityClient, parseTask, type TcTask } from "./resources/productivity.js";
 export { FilesClient, parseFile, type TcFile } from "./resources/files.js";

@@ -23,6 +23,23 @@ export function registerLeasingTools(server: McpServer, client: TcClient, cache:
   );
 
   server.registerTool(
+    "get_lease_signing_status",
+    {
+      description:
+        "Check whether a lease (or renewal) has been signed. Returns each roommate's signing state (signed / not_signed / not_required), who still needs to sign, and a plain-language summary. Signing lives on the lease's roommates, not the lease record, so prefer this over get_lease for 'is it signed?' questions. A future lease that still needs signatures is an unsigned renewal.",
+      inputSchema: { leaseId: z.number().int().describe("Lease ID") },
+    },
+    async ({ leaseId }) => {
+      try {
+        const signing = await client.leasing.getLeaseSigning(leaseId);
+        return signing ? toolSuccess(signing) : toolError(`lease ${leaseId} not found`);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "update_lease",
     {
       description: "Update fields on an existing lease (e.g. rent amount, end date, name).",

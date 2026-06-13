@@ -16,7 +16,16 @@
  *   GET/POST   /renter_profiles/{incomes|pets|references|residences|vehicles|emergency_contacts}
  */
 import { parseLease, type TcLease } from "../models.js";
-import { parseTcDateOrNull, pick, toNumber } from "../json.js";
+import {
+  parseLeaseStatus,
+  parseTcDateOrNull,
+  pick,
+  toBoolean,
+  toNumber,
+  toNumberOrNull,
+  toStringOrNull,
+  type TcLeaseStatus,
+} from "../json.js";
 import { TcClientError } from "../errors.js";
 import { parseThread, type TcThread } from "./messaging.js";
 import {
@@ -74,6 +83,101 @@ const RENTER_PROFILE_TYPE: Record<RenterProfileKind, string> = {
   emergency_contacts: "renter_profile_emergency_contact",
 };
 
+/**
+ * A tenant on a lease (`lease_roommate`). The lease *signing* state lives here,
+ * not on the lease itself: `is_signature_required` says whether this tenant must
+ * sign, `steps_info.agreement` flips to `true` once they have, and `is_shared`
+ * means the lease was sent to them.
+ */
+export interface TcLeaseRoommate {
+  id: number;
+  contactId: number | null;
+  name: string | null;
+  email: string | null;
+  isSignatureRequired: boolean;
+  isShared: boolean;
+  isSigned: boolean;
+  signingStatus: "signed" | "not_signed" | "not_required";
+}
+
+/** Rolled-up signing state for a lease, derived from its roommates. */
+export interface TcLeaseSigning {
+  leaseId: number;
+  leaseStatus: TcLeaseStatus | null;
+  /** At least one roommate must sign. */
+  signatureRequired: boolean;
+  /** Every roommate who must sign has signed. */
+  allSigned: boolean;
+  /** Names/emails of roommates who still need to sign. */
+  pendingSigners: string[];
+  roommates: TcLeaseRoommate[];
+  summary: string;
+}
+
+interface RawRelationship {
+  data?: { id?: unknown } | Array<{ id?: unknown }> | null;
+}
+interface RawResource {
+  id?: unknown;
+  type?: unknown;
+  attributes?: Record<string, unknown> | null;
+  relationships?: Record<string, RawRelationship> | null;
+}
+
+function relationshipId(rels: Record<string, RawRelationship> | null | undefined, name: string): number | null {
+  const data = rels?.[name]?.data;
+  const first = Array.isArray(data) ? data[0] : data;
+  return first ? toNumberOrNull(first.id) : null;
+}
+
+function parseLeaseRoommate(
+  item: RawResource,
+  contactsById: Map<number, { name: string | null; email: string | null }>,
+): TcLeaseRoommate {
+  const a = item.attributes ?? {};
+  const isSignatureRequired = toBoolean(pick(a, "is_signature_required"));
+  const steps = pick(a, "steps_info");
+  const isSigned =
+    steps !== null && typeof steps === "object"
+      ? Boolean((steps as Record<string, unknown>)["agreement"])
+      : false;
+  const contactId =
+    relationshipId(item.relationships, "contact") ?? toNumberOrNull(pick(a, "user_client_id", "contact_id"));
+  const contact = contactId !== null ? contactsById.get(contactId) : undefined;
+  return {
+    id: toNumber(item.id ?? 0),
+    contactId,
+    name: contact?.name ?? toStringOrNull(pick(a, "name")),
+    email: contact?.email ?? toStringOrNull(pick(a, "email")),
+    isSignatureRequired,
+    isShared: toBoolean(pick(a, "is_shared")),
+    isSigned,
+    signingStatus: !isSignatureRequired ? "not_required" : isSigned ? "signed" : "not_signed",
+  };
+}
+
+function summarizeSigning(
+  leaseId: number,
+  leaseStatus: TcLeaseStatus | null,
+  roommates: TcLeaseRoommate[],
+): TcLeaseSigning {
+  const required = roommates.filter((r) => r.isSignatureRequired);
+  const signatureRequired = required.length > 0;
+  const pending = required.filter((r) => !r.isSigned);
+  const allSigned = signatureRequired && pending.length === 0;
+  const pendingSigners = pending.map((r) => r.name ?? r.email ?? `roommate ${r.id}`);
+  const noun = leaseStatus === "future" ? "renewal" : "lease";
+  let summary: string;
+  if (!signatureRequired) {
+    summary = `No signatures are required on this ${noun}.`;
+  } else if (allSigned) {
+    summary = `This ${noun} is fully signed by all ${required.length} required signer(s).`;
+  } else {
+    summary = `This ${noun} is NOT fully signed - awaiting ${pendingSigners.length} of ${required.length} signer(s): ${pendingSigners.join(", ")}.`;
+  }
+  return { leaseId, leaseStatus, signatureRequired, allSigned, pendingSigners, roommates, summary };
+}
+
 export class LeasingClient {
   constructor(private readonly http: TcHttp) {}
 
@@ -83,6 +187,50 @@ export class LeasingClient {
     const payload = await this.http.request("GET", `/leases/${id}`, { signal });
     const one = parseJsonApiOne(payload);
     return one ? parseLease(one) : null;
+  }
+
+  /**
+   * Fetch a lease's signing status. Signing data lives on the lease's
+   * `lease_roommate` records, which only appear in `included[]` when the lease
+   * is requested with `include=roommates`; this also pulls `roommates.contact`
+   * to resolve each signer's name. Returns null if the lease is not found.
+   */
+  async getLeaseSigning(id: number, signal?: AbortSignal): Promise<TcLeaseSigning | null> {
+    const payload = await this.http.request(
+      "GET",
+      withQuery(`/leases/${id}`, { include: "roommates,roommates.contact" }),
+      { signal },
+    );
+    const env = (payload ?? {}) as { data?: RawResource | null; included?: RawResource[] | null };
+    if (!env.data || typeof env.data !== "object") {
+      return null;
+    }
+    const leaseAttrs = env.data.attributes ?? {};
+    let leaseStatus: TcLeaseStatus | null = null;
+    try {
+      leaseStatus = parseLeaseStatus(pick(leaseAttrs, "lease_status"));
+    } catch {
+      leaseStatus = null;
+    }
+    const included = Array.isArray(env.included) ? env.included : [];
+    const contactsById = new Map<number, { name: string | null; email: string | null }>();
+    for (const it of included) {
+      if (String(it.type) === "userClient" && it.attributes) {
+        const cid = toNumberOrNull(it.id);
+        if (cid !== null) {
+          const a = it.attributes;
+          const composed = [toStringOrNull(pick(a, "first_name")), toStringOrNull(pick(a, "last_name"))]
+            .filter(Boolean)
+            .join(" ");
+          const name = toStringOrNull(pick(a, "name")) ?? (composed !== "" ? composed : null);
+          contactsById.set(cid, { name, email: toStringOrNull(pick(a, "email")) });
+        }
+      }
+    }
+    const roommates = included
+      .filter((it) => String(it.type) === "lease_roommate")
+      .map((it) => parseLeaseRoommate(it, contactsById));
+    return summarizeSigning(toNumber(env.data.id ?? id), leaseStatus, roommates);
   }
 
   async createLease(

@@ -239,3 +239,77 @@ describe("TcClient write paths", () => {
     });
   });
 });
+
+describe("lease signing status", () => {
+  function leaseSigningResponse() {
+    return jsonResponse({
+      data: {
+        type: "leases",
+        id: "555",
+        attributes: { lease_status: "future" },
+        relationships: { roommates: { data: [{ id: "1" }, { id: "2" }] } },
+      },
+      included: [
+        {
+          type: "lease_roommate",
+          id: "1",
+          attributes: { is_signature_required: true, is_shared: true, steps_info: { agreement: true } },
+          relationships: { contact: { data: { id: "9001" } } },
+        },
+        {
+          type: "lease_roommate",
+          id: "2",
+          attributes: { is_signature_required: true, is_shared: true, steps_info: { agreement: false } },
+          relationships: { contact: { data: { id: "9002" } } },
+        },
+        { type: "userClient", id: "9001", attributes: { name: "Alice Tenant", email: "alice@x.com" } },
+        { type: "userClient", id: "9002", attributes: { name: "Bob Tenant", email: "bob@x.com" } },
+      ],
+    });
+  }
+
+  it("requests roommates and derives per-signer + overall signing state", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(leaseSigningResponse());
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const signing = await client.leasing.getLeaseSigning(555);
+
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("/leases/555");
+    expect(url).toContain(`${encodeURIComponent("include")}=${encodeURIComponent("roommates,roommates.contact")}`);
+
+    expect(signing?.leaseStatus).toBe("future");
+    expect(signing?.signatureRequired).toBe(true);
+    expect(signing?.allSigned).toBe(false);
+    expect(signing?.pendingSigners).toEqual(["Bob Tenant"]);
+    expect(signing?.roommates).toHaveLength(2);
+    expect(signing?.roommates[0]).toMatchObject({ name: "Alice Tenant", isSigned: true, signingStatus: "signed" });
+    expect(signing?.roommates[1]).toMatchObject({ name: "Bob Tenant", isSigned: false, signingStatus: "not_signed" });
+    // future + unsigned reads as an unsigned renewal
+    expect(signing?.summary).toContain("renewal");
+    expect(signing?.summary).toContain("NOT fully signed");
+  });
+
+  it("reports not_required when no roommate needs a signature", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: { type: "leases", id: "7", attributes: { lease_status: "active" } },
+        included: [
+          {
+            type: "lease_roommate",
+            id: "1",
+            attributes: { is_signature_required: false, steps_info: { agreement: true } },
+          },
+        ],
+      }),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const signing = await client.leasing.getLeaseSigning(7);
+
+    expect(signing?.signatureRequired).toBe(false);
+    expect(signing?.allSigned).toBe(false);
+    expect(signing?.roommates[0]?.signingStatus).toBe("not_required");
+    expect(signing?.summary).toContain("No signatures are required");
+  });
+});
