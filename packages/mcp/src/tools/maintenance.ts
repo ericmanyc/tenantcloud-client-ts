@@ -14,8 +14,14 @@ export function registerMaintenanceTools(server: McpServer, client: TcClient, ca
       inputSchema: {
         propertyId: z.number().int().optional().describe("Filter by property ID"),
         clientId: z.number().int().optional().describe("Filter by tenant/contact ID"),
-        status: z.string().optional().describe("Filter by status (e.g. new, in_progress, resolved)"),
-        priority: z.string().optional().describe("Filter by priority (e.g. low, medium, high, urgent)"),
+        status: z
+          .string()
+          .optional()
+          .describe("Filter by status: new, in_progress, resolved, archived, canceled, in_review (a numeric code also works)"),
+        priority: z
+          .string()
+          .optional()
+          .describe("Filter by priority: low, normal, high, critical (a numeric code also works)"),
         assigneeId: z.number().int().optional().describe("Filter by assignee ID"),
         maxResults: maxResultsParam,
       },
@@ -66,7 +72,7 @@ export function registerMaintenanceTools(server: McpServer, client: TcClient, ca
         propertyId: z.number().int().optional().describe("Property ID the request is for"),
         clientId: z.number().int().optional().describe("Tenant/contact ID who reported it"),
         categoryId: z.number().int().optional().describe("Category ID"),
-        priority: z.string().optional().describe("Priority: low, medium, high, urgent"),
+        priority: z.string().optional().describe("Priority: low, normal, high, critical"),
         assigneeId: z.number().int().optional().describe("Assignee (professional/team member) ID"),
         due: z.string().optional().describe("Due date (YYYY-MM-DD)"),
       },
@@ -100,8 +106,11 @@ export function registerMaintenanceTools(server: McpServer, client: TcClient, ca
         id: z.number().int().describe("Maintenance request ID"),
         title: z.string().optional(),
         text: z.string().optional(),
-        status: z.string().optional().describe("New status"),
-        priority: z.string().optional(),
+        status: z
+          .string()
+          .optional()
+          .describe("New status: new, in_progress, resolved, archived, canceled, in_review"),
+        priority: z.string().optional().describe("Priority: low, normal, high, critical"),
         assigneeId: z.number().int().optional(),
         due: z.string().optional().describe("Due date (YYYY-MM-DD)"),
       },

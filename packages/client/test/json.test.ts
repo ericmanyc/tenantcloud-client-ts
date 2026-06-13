@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  labelPropertyKeyType,
+  maintenancePriorityCode,
+  maintenanceStatusCode,
   parseLeaseStatus,
+  parseMaintenancePriority,
+  parseMaintenanceStatus,
   parseTcDate,
   parseTcDateOrNull,
   parseTransactionCategory,
@@ -101,6 +106,58 @@ describe("lease status converter port", () => {
     expect(parseLeaseStatus("active")).toBe("active");
     expect(parseLeaseStatus("insurance_pending")).toBe("insurance_pending");
     expect(parseLeaseStatus("InsurancePending")).toBe("insurance_pending");
+  });
+});
+
+describe("maintenance status normalizer (lenient)", () => {
+  it("maps numeric codes and numeric strings to names", () => {
+    expect(parseMaintenanceStatus(1)).toBe("new");
+    expect(parseMaintenanceStatus(2)).toBe("in_progress");
+    expect(parseMaintenanceStatus(6)).toBe("in_review");
+    expect(parseMaintenanceStatus("3")).toBe("resolved");
+  });
+
+  it("canonicalizes names case-insensitively and from CamelCase/spaces", () => {
+    expect(parseMaintenanceStatus("New")).toBe("new");
+    expect(parseMaintenanceStatus("In Progress")).toBe("in_progress");
+    expect(parseMaintenanceStatus("InReview")).toBe("in_review");
+  });
+
+  it("passes unknown values through instead of throwing, and blanks to null", () => {
+    expect(parseMaintenanceStatus("waiting_on_parts")).toBe("waiting_on_parts");
+    expect(parseMaintenanceStatus(99)).toBe("99");
+    expect(parseMaintenanceStatus(null)).toBeNull();
+    expect(parseMaintenanceStatus("")).toBeNull();
+  });
+});
+
+describe("maintenance priority normalizer (lenient)", () => {
+  it("maps codes and names", () => {
+    expect(parseMaintenancePriority(1)).toBe("low");
+    expect(parseMaintenancePriority(4)).toBe("critical");
+    expect(parseMaintenancePriority("High")).toBe("high");
+    expect(parseMaintenancePriority("2")).toBe("normal");
+  });
+});
+
+describe("maintenance filter codes (name/code -> numeric code)", () => {
+  it("resolves names and numeric strings to codes, null when unknown", () => {
+    expect(maintenanceStatusCode("resolved")).toBe(3);
+    expect(maintenanceStatusCode("In Progress")).toBe(2);
+    expect(maintenanceStatusCode(5)).toBe(5);
+    expect(maintenanceStatusCode("5")).toBe(5);
+    expect(maintenanceStatusCode("bogus")).toBeNull();
+    expect(maintenancePriorityCode("critical")).toBe(4);
+  });
+});
+
+describe("property key type labels", () => {
+  it("labels known codes and returns null for unknown/absent", () => {
+    expect(labelPropertyKeyType(1)).toBe("Main door");
+    expect(labelPropertyKeyType(12)).toBe("Garage");
+    expect(labelPropertyKeyType(13)).toBe("Other");
+    expect(labelPropertyKeyType(99)).toBeNull();
+    expect(labelPropertyKeyType(null)).toBeNull();
   });
 });
 

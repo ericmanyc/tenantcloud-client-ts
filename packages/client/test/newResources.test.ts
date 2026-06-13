@@ -85,9 +85,14 @@ describe("portfolio parsers (synthetic data matching the live JSON:API shape)", 
       type: 1,
       created_at: "2026-03-30T15:59:55.000000Z",
     });
-    expect(k).toMatchObject({ id: 11, keyname: "Unit A Front Door", type: 1 });
+    expect(k).toMatchObject({ id: 11, keyname: "Unit A Front Door", type: 1, typeLabel: "Main door" });
     expect(k.comment).toContain("0000");
     expect(k.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("leaves typeLabel null for an unknown or absent key type", () => {
+    expect(parsePropertyKey({ id: 1, keyname: "x", type: 99 }).typeLabel).toBeNull();
+    expect(parsePropertyKey({ id: 2, keyname: "y" }).typeLabel).toBeNull();
   });
 
   it("parses property equipment with snake_case -> camelCase mapping", () => {
@@ -159,6 +164,36 @@ describe("portfolio client paths", () => {
     expect(JSON.parse(init.body as string)).toEqual({
       data: { type: "property_equipment", attributes: { property_id: 5, make: "Carrier" } },
     });
+  });
+});
+
+describe("maintenance list filters (status/priority names become numeric codes)", () => {
+  it("converts a status name to its filter code in the request URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [],
+        meta: { pagination: { total: 0, current_page: 1, per_page: 12, total_pages: 1 } },
+      }),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    await client.maintenance.list({ status: "resolved", priority: "critical" });
+
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain(`${encodeURIComponent("filter[status]")}=3`);
+    expect(url).toContain(`${encodeURIComponent("filter[priority]")}=4`);
+  });
+
+  it("passes an unrecognized status through unchanged", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ data: [], meta: { pagination: { total: 0, current_page: 1, per_page: 12, total_pages: 1 } } }),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    await client.maintenance.list({ status: "waiting_on_parts" });
+
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain(`${encodeURIComponent("filter[status]")}=waiting_on_parts`);
   });
 });
 

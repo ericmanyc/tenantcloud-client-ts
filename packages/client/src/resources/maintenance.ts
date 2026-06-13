@@ -15,7 +15,17 @@
  *   GET/POST   /inspections/items (+ /{id}, /{id}/sign)
  *   GET        /inspections/records (+ /{id})
  */
-import { parseTcDateOrNull, pick, toBoolean, toNumber, toNumberOrNull } from "../json.js";
+import {
+  maintenancePriorityCode,
+  maintenanceStatusCode,
+  parseMaintenancePriority,
+  parseMaintenanceStatus,
+  parseTcDateOrNull,
+  pick,
+  toBoolean,
+  toNumber,
+  toNumberOrNull,
+} from "../json.js";
 import {
   jsonApiBody,
   parseJsonApiList,
@@ -56,8 +66,8 @@ export function parseMaintenanceRequest(raw: Record<string, unknown>): TcMainten
     id: toNumber(pick(raw, "id") ?? 0),
     title: (pick(raw, "title") as string | null) ?? null,
     text: (pick(raw, "text") as string | null) ?? null,
-    status: toStr(pick(raw, "status")),
-    priority: toStr(pick(raw, "priority")),
+    status: parseMaintenanceStatus(pick(raw, "status")),
+    priority: parseMaintenancePriority(pick(raw, "priority")),
     propertyId: toNumberOrNull(pick(raw, "property_id")),
     clientId: toNumberOrNull(pick(raw, "client_id")),
     categoryId: toNumberOrNull(pick(raw, "category_id")),
@@ -101,8 +111,10 @@ export class MaintenanceClient {
     const q: Record<string, string | number | undefined> = { page: o.page, sort: o.sort };
     if (o.propertyId !== undefined) q["filter[property_id]"] = o.propertyId;
     if (o.clientId !== undefined) q["filter[client_id]"] = o.clientId;
-    if (o.status !== undefined) q["filter[status]"] = o.status;
-    if (o.priority !== undefined) q["filter[priority]"] = o.priority;
+    // The API filters on numeric status/priority codes; accept a name or a code
+    // and send the code when we recognize it, otherwise pass the value through.
+    if (o.status !== undefined) q["filter[status]"] = maintenanceStatusCode(o.status) ?? o.status;
+    if (o.priority !== undefined) q["filter[priority]"] = maintenancePriorityCode(o.priority) ?? o.priority;
     if (o.assigneeId !== undefined) q["filter[assignee_id]"] = o.assigneeId;
     return q;
   }

@@ -7,9 +7,17 @@ export {
 export { TcClientError } from "./errors.js";
 export {
   LEASE_STATUSES,
+  MAINTENANCE_PRIORITIES,
+  MAINTENANCE_STATUSES,
+  PROPERTY_KEY_TYPES,
   TRANSACTION_CATEGORIES,
   TRANSACTION_STATUSES,
+  labelPropertyKeyType,
+  maintenancePriorityCode,
+  maintenanceStatusCode,
   parseLeaseStatus,
+  parseMaintenancePriority,
+  parseMaintenanceStatus,
   parseTcDate,
   parseTcDateOrNull,
   parseTransactionCategory,
@@ -17,6 +25,8 @@ export {
   toNumber,
   toNumberOrNull,
   type TcLeaseStatus,
+  type TcMaintenancePriority,
+  type TcMaintenanceStatus,
   type TcTransactionCategory,
   type TcTransactionStatus,
 } from "./json.js";

@@ -12,7 +12,15 @@
  * Note: a key's owning property is not echoed back in its attributes, but the
  * list still honours filter[property_id].
  */
-import { parseTcDateOrNull, pick, toBoolean, toNumber, toNumberOrNull, toStringOrNull } from "../json.js";
+import {
+  labelPropertyKeyType,
+  parseTcDateOrNull,
+  pick,
+  toBoolean,
+  toNumber,
+  toNumberOrNull,
+  toStringOrNull,
+} from "../json.js";
 import { jsonApiBody, withQuery, type TcHttp } from "./jsonApi.js";
 
 export interface TcPropertyKey {
@@ -21,17 +29,21 @@ export interface TcPropertyKey {
   keyname: string | null;
   /** Free-text notes (often HTML) - this is where door/lockbox codes live. */
   comment: string | null;
-  /** Numeric key type/category (e.g. 1, 5); meaning is TenantCloud-internal. */
+  /** Numeric key type/category (e.g. 1=Main door, 5=Laundry room). */
   type: number | null;
+  /** Human label for `type` (e.g. "Main door"), or null if the code is unknown. */
+  typeLabel: string | null;
   createdAt: Date | null;
 }
 
 export function parsePropertyKey(raw: Record<string, unknown>): TcPropertyKey {
+  const type = toNumberOrNull(pick(raw, "type"));
   return {
     id: toNumber(pick(raw, "id") ?? 0),
     keyname: toStringOrNull(pick(raw, "keyname")),
     comment: toStringOrNull(pick(raw, "comment")),
-    type: toNumberOrNull(pick(raw, "type")),
+    type,
+    typeLabel: labelPropertyKeyType(type),
     createdAt: parseTcDateOrNull(pick(raw, "created_at")),
   };
 }

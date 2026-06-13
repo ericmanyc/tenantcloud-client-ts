@@ -209,6 +209,142 @@ export function parseTransactionCategory(value: unknown): TcTransactionCategory 
   throw new Error(`Unknown transaction category ${JSON.stringify(value)}`);
 }
 
+export const MAINTENANCE_STATUSES = [
+  "new",
+  "in_progress",
+  "resolved",
+  "archived",
+  "canceled",
+  "in_review",
+] as const;
+
+export type TcMaintenanceStatus = (typeof MAINTENANCE_STATUSES)[number];
+
+const MAINTENANCE_STATUS_CODES: Record<number, TcMaintenanceStatus> = {
+  1: "new",
+  2: "in_progress",
+  3: "resolved",
+  4: "archived",
+  5: "canceled",
+  6: "in_review",
+};
+
+export const MAINTENANCE_PRIORITIES = ["low", "normal", "high", "critical"] as const;
+
+export type TcMaintenancePriority = (typeof MAINTENANCE_PRIORITIES)[number];
+
+const MAINTENANCE_PRIORITY_CODES: Record<number, TcMaintenancePriority> = {
+  1: "low",
+  2: "normal",
+  3: "high",
+  4: "critical",
+};
+
+/**
+ * Normalize a status/priority that may arrive as a numeric code, a numeric
+ * string, or a name. Unlike the lease/transaction parsers this is *lenient*:
+ * unknown values pass through as their original string rather than throwing,
+ * because the maintenance wire format is less certain than leases/transactions
+ * and we never want a single odd record to crash a whole list (see the
+ * real-data robustness lessons in the smoke test).
+ */
+function normalizeCoded<T extends string>(
+  value: unknown,
+  byCode: Record<number, T>,
+  names: readonly T[],
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "number") {
+    return byCode[value] ?? String(value);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") {
+      return null;
+    }
+    if (/^\d+$/.test(trimmed)) {
+      const byNumber = byCode[Number(trimmed)];
+      if (byNumber) {
+        return byNumber;
+      }
+    }
+    const snake = trimmed.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/\s+/g, "_").toLowerCase() as T;
+    if (names.includes(snake)) {
+      return snake;
+    }
+    return trimmed;
+  }
+  return String(value);
+}
+
+/** Map a maintenance-request status (code/name) to its canonical string name. */
+export function parseMaintenanceStatus(value: unknown): string | null {
+  return normalizeCoded(value, MAINTENANCE_STATUS_CODES, MAINTENANCE_STATUSES);
+}
+
+/** Map a maintenance-request priority (code/name) to its canonical string name. */
+export function parseMaintenancePriority(value: unknown): string | null {
+  return normalizeCoded(value, MAINTENANCE_PRIORITY_CODES, MAINTENANCE_PRIORITIES);
+}
+
+function reverseCode<T extends string>(value: string | number, byCode: Record<number, T>): number | null {
+  if (typeof value === "number") {
+    return value in byCode ? value : null;
+  }
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    return n in byCode ? n : null;
+  }
+  const snake = trimmed.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/\s+/g, "_").toLowerCase();
+  for (const [code, name] of Object.entries(byCode)) {
+    if (name === snake) {
+      return Number(code);
+    }
+  }
+  return null;
+}
+
+/** Numeric filter code for a maintenance status name/code, or null if unknown. */
+export function maintenanceStatusCode(value: string | number): number | null {
+  return reverseCode(value, MAINTENANCE_STATUS_CODES);
+}
+
+/** Numeric filter code for a maintenance priority name/code, or null if unknown. */
+export function maintenancePriorityCode(value: string | number): number | null {
+  return reverseCode(value, MAINTENANCE_PRIORITY_CODES);
+}
+
+/**
+ * Property "Keys & Locks" type codes (the `type` attribute on a property_key).
+ * The codes are TenantCloud-internal; these labels are the UI's meanings.
+ */
+export const PROPERTY_KEY_TYPES: Record<number, string> = {
+  1: "Main door",
+  2: "Security door",
+  3: "Mailbox",
+  4: "Trash area",
+  5: "Laundry room",
+  6: "Inside door",
+  7: "Roof",
+  8: "Basement",
+  9: "Boiler room",
+  10: "Storage",
+  11: "Common area",
+  12: "Garage",
+  13: "Other",
+};
+
+/** Human label for a property-key type code, or null if unknown/absent. */
+export function labelPropertyKeyType(code: number | null | undefined): string | null {
+  if (code === null || code === undefined) {
+    return null;
+  }
+  return PROPERTY_KEY_TYPES[code] ?? null;
+}
+
 /** Case-insensitive property lookup, because TenantCloud mixes casings. */
 export function pick(raw: Record<string, unknown>, ...names: string[]): unknown {
   for (const name of names) {

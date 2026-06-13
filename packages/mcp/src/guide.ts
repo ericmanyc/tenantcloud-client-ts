@@ -107,6 +107,43 @@ A lease agreement.
 - \`endDate\` (date?) - End date (null = month-to-month)
 - \`moveOutDate\` (date?) - Actual move-out date (null if still active)
 - \`status\` (string) - active, archived, ended, expired, future, pending, etc.
+- \`leaseType\` - 1 = fixed-term, 2 = month-to-month
+
+## Status Codes & Enumerations
+
+TenantCloud stores many fields as numeric codes. The client already normalizes the
+common ones to readable names on the way out (lease/transaction \`status\`,
+maintenance \`status\`/\`priority\`, and a property key's \`typeLabel\`). These tables
+matter when you filter, write, or read a raw field through \`tc_request\`. Filters
+accept either the name or the numeric code.
+
+### Lease status
+0 Active, 1 Future, 2 Expired, 4 Ended, 9 Pending, 10 NotActive, 11 Archived,
+12 InsurancePending, 13 ExpiresIn
+
+### Property / Lease type
+Property \`type\`: 1 = single-family, 2 = multi-family.
+Lease \`lease_type\`: 1 = fixed-term, 2 = month-to-month.
+
+### Transaction status / category
+Status: 0 due, 1 paid, 2 partial, 3 pending, 9 void, 10 with_balance, 11 overdue, 12 waive.
+Category: income, expense, refund, credits, liability.
+
+### Maintenance request status
+1 New, 2 In Progress, 3 Resolved, 4 Archived, 5 Canceled, 6 In Review.
+
+### Maintenance priority
+1 Low, 2 Normal, 3 High, 4 Critical.
+
+### Property key / lock type
+1 Main door, 2 Security door, 3 Mailbox, 4 Trash area, 5 Laundry room, 6 Inside door,
+7 Roof, 8 Basement, 9 Boiler room, 10 Storage, 11 Common area, 12 Garage, 13 Other.
+Door/lockbox codes live in the key's \`comment\` field, not \`description\`.
+
+### Notification feed types (\`tc_request\` GET /feed)
+52 Payment initiated, 193 New leads, 501 Maintenance message, 502 New maintenance
+request, 555 Payment cleared, 558 Payment success, 721 New message (check
+\`details.channel\`).
 
 ## Tool Filters - CRITICAL
 
@@ -214,6 +251,11 @@ channel. Prospective tenants are in the \`leads\` channel.
 so \`find_threads\` returns nothing for them. Resolve the lead via \`list_leads\` -> call
 \`message_lead\` with the lead's \`id\`; it creates the thread and sends in one step.
 
+**SMS limits**: messages to tenant and lead threads are delivered as SMS - keep them
+under ~1000 characters, and a single thread caps at ~15 outbound messages. \`list_leads\`
+is paged 12 per page and ignores a \`status\` filter (it returns every status), so filter
+lead status yourself after fetching.
+
 ### Maintenance
 - \`list_maintenance_requests\` (filters: \`propertyId\`, \`clientId\`, \`status\`, \`priority\`, \`assigneeId\`)
 - \`get_maintenance_request\` (\`id\`)
@@ -232,6 +274,13 @@ so \`find_threads\` returns nothing for them. Resolve the lead via \`list_leads\
 
 ### Leasing
 - \`get_lease\` (\`id\`) / \`update_lease\` (\`id\`, rent/dates) / \`create_lease\` (\`unitId\`, \`tenantId\`, rent)
+
+**Lease signing status** is NOT on the lease itself - it lives on each
+\`lease_roommate\` record (fetch with the lease's roommates included). For a
+roommate: \`is_signature_required: true\` means they must sign; \`steps_info.agreement\`
+is \`true\` once they have signed and \`false\` while unsigned; \`is_shared: true\` means
+the lease was sent to them. So a future lease with \`is_signature_required: true\`
+and \`agreement: false\` is a renewal that has NOT been signed yet.
 - \`add_lease_roommate\` (\`leaseId\`, name) / \`create_lease_notice\` (\`leaseId\`, \`type\`, \`text\`)
 - \`list_lease_notices\` (\`leaseId\`)
 - \`list_applications\` / \`create_application\` / \`submit_application\` (\`id\`)

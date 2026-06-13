@@ -17,7 +17,7 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
     "list_property_keys",
     {
       description:
-        "List Keys & Locks for a property (door codes, lockbox codes, physical keys). The actual codes are usually in the 'comment' field. Filter by property.",
+        "List Keys & Locks for a property (door codes, lockbox codes, physical keys). The actual codes are usually in the 'comment' field. Each key has a numeric 'type' plus a human-readable 'typeLabel' (e.g. Main door, Mailbox, Garage). Filter by property.",
       inputSchema: {
         propertyId: z.number().int().optional().describe("Filter by property ID"),
         maxResults: maxResultsParam,
@@ -40,8 +40,14 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
       inputSchema: {
         propertyId: z.number().int().describe("Property ID the key belongs to"),
         keyname: z.string().describe("Label for the key/lock, e.g. 'Front Gate'"),
-        comment: z.string().optional().describe("Notes/details - this is where the code typically goes"),
-        type: z.number().int().optional().describe("Numeric key type (TenantCloud-internal; defaults to 1)"),
+        comment: z.string().optional().describe("Notes/details - this is where the lockbox/door code typically goes"),
+        type: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            "Key type: 1=Main door, 2=Security door, 3=Mailbox, 4=Trash area, 5=Laundry room, 6=Inside door, 7=Roof, 8=Basement, 9=Boiler room, 10=Storage, 11=Common area, 12=Garage, 13=Other (defaults to 1)",
+          ),
       },
     },
     async ({ propertyId, keyname, comment, type }) => {
@@ -64,7 +70,13 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
         id: z.number().int().describe("Key ID"),
         keyname: z.string().optional(),
         comment: z.string().optional().describe("Notes/details (where the code lives)"),
-        type: z.number().int().optional(),
+        type: z
+          .number()
+          .int()
+          .optional()
+          .describe(
+            "Key type: 1=Main door, 2=Security door, 3=Mailbox, 4=Trash area, 5=Laundry room, 6=Inside door, 7=Roof, 8=Basement, 9=Boiler room, 10=Storage, 11=Common area, 12=Garage, 13=Other",
+          ),
       },
     },
     async ({ id, keyname, comment, type }) => {
