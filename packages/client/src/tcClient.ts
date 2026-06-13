@@ -33,6 +33,7 @@ import { LeasingClient } from "./resources/leasing.js";
 import { ProductivityClient } from "./resources/productivity.js";
 import { FilesClient } from "./resources/files.js";
 import { ContactsClient } from "./resources/contacts.js";
+import { PortfolioClient } from "./resources/portfolio.js";
 
 export interface TcClientOptions {
   /** TenantCloud API base URL. */
@@ -68,6 +69,8 @@ export class TcClient implements TcHttp {
   readonly files: FilesClient;
   /** Contact writes (create/update/invite) and insurances. */
   readonly crm: ContactsClient;
+  /** Per-property keys & locks and equipment. */
+  readonly portfolio: PortfolioClient;
 
   constructor(tokenProvider: TcAuthTokenProvider, options: TcClientOptions = {}) {
     this.tokenProvider = tokenProvider;
@@ -89,6 +92,7 @@ export class TcClient implements TcHttp {
     this.productivity = new ProductivityClient(this);
     this.files = new FilesClient(this);
     this.crm = new ContactsClient(this);
+    this.portfolio = new PortfolioClient(this);
   }
 
   async getUserInfo(signal?: AbortSignal): Promise<TcUserInfo | null> {

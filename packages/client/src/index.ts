@@ -94,5 +94,16 @@ export {
 export { ProductivityClient, parseTask, type TcTask } from "./resources/productivity.js";
 export { FilesClient, parseFile, type TcFile } from "./resources/files.js";
 export { ContactsClient } from "./resources/contacts.js";
+export {
+  PortfolioClient,
+  PropertyEquipmentClient,
+  PropertyKeysClient,
+  parsePropertyEquipment,
+  parsePropertyKey,
+  type EquipmentListOptions,
+  type PropertyKeyListOptions,
+  type TcPropertyEquipment,
+  type TcPropertyKey,
+} from "./resources/portfolio.js";
 export { FileTokenStore } from "./store/fileTokenStore.js";
 export { SecureTokenStore, type SecureTokenStoreOptions } from "./store/secureTokenStore.js";

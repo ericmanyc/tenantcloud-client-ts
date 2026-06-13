@@ -16,6 +16,7 @@ import { registerProductivityTools } from "./tools/productivity.js";
 import { registerDocumentTools } from "./tools/documents.js";
 import { registerCrmTools } from "./tools/crm.js";
 import { registerExtraWriteTools } from "./tools/extraWrites.js";
+import { registerPortfolioTools } from "./tools/portfolio.js";
 import { registerGenericTools } from "./tools/generic.js";
 
 export interface ServerOptions {
@@ -276,6 +277,7 @@ export function createServer(client: TcClient, options: ServerOptions = {}): Mcp
   registerDocumentTools(server, client);
   registerCrmTools(server, client);
   registerExtraWriteTools(server, client);
+  registerPortfolioTools(server, client, cache);
   registerGenericTools(server, client);
 
   server.registerResource(

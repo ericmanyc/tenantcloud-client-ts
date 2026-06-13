@@ -66,13 +66,14 @@ Each company hosts its own instance (fork or clone this repo - there is no share
 
 ## MCP tools
 
-35 tools across six areas, plus resources `tc://guide`, `tc://catalog`, `tc://property/{id}`, `tc://unit/{id}`, `tc://contact/{id}`:
+68 tools across seven areas, plus resources `tc://guide`, `tc://catalog`, `tc://property/{id}`, `tc://unit/{id}`, `tc://contact/{id}`:
 
 - **Core reads**: `get_user_info`, `list_contacts`, `list_properties`, `list_units`, `list_transactions`, `list_leases`
 - **Messaging**: `list_message_channels`, `list_threads`, `find_threads`, `list_messages`, `send_message`, `message_lead` (first contact with a lead: creates their thread and sends in one step), `mark_thread_read`
 - **Maintenance**: `list_maintenance_requests`, `get_maintenance_request`, `create_maintenance_request`, `update_maintenance_request`, `resolve_maintenance_request`, `list_inspections`
 - **Financials**: `get_transaction_statistics`, `create_transaction`, `update_transaction`, `delete_transaction`, `list_recurring_transactions`, `list_payments`, `list_reconciliation_accounts`, `owner_balances`
 - **Leasing**: `get_lease`, `update_lease`, `list_lease_notices`, `list_applications`, `list_screenings`, `list_leads`, `create_lead`
+- **Portfolio**: `list_property_keys`, `create_property_key`, `update_property_key`, `delete_property_key` (Keys & Locks - door/lockbox codes); `list_equipment`, `create_equipment`, `update_equipment`, `delete_equipment`
 - **Escape hatch**: `tc_request` (any of the ~1100 cataloged endpoints; see `tc://catalog`)
 
 Tool responses resolve foreign-key IDs to human-readable names via an entity cache, and messenger payloads are slimmed so they fit agent context windows.

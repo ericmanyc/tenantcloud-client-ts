@@ -5,6 +5,7 @@ import { parseTask } from "../src/resources/productivity.js";
 import { parseFile } from "../src/resources/files.js";
 import { parseJsonApiList, normalizeItem } from "../src/resources/jsonApi.js";
 import { parseMaintenanceRequest } from "../src/resources/maintenance.js";
+import { parsePropertyEquipment, parsePropertyKey } from "../src/resources/portfolio.js";
 import { parseTcDateOrNull } from "../src/json.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -71,6 +72,92 @@ describe("real-data robustness (found via live smoke test)", () => {
       amount: 5,
       type: "transaction_payment_statistics",
       id: 0,
+    });
+  });
+});
+
+describe("portfolio parsers (synthetic data matching the live JSON:API shape)", () => {
+  it("parses a property key (codes live in comment; property_id not echoed)", () => {
+    const k = parsePropertyKey({
+      id: "11",
+      keyname: "Unit A Front Door",
+      comment: "<p>Code - 0000</p>",
+      type: 1,
+      created_at: "2026-03-30T15:59:55.000000Z",
+    });
+    expect(k).toMatchObject({ id: 11, keyname: "Unit A Front Door", type: 1 });
+    expect(k.comment).toContain("0000");
+    expect(k.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("parses property equipment with snake_case -> camelCase mapping", () => {
+    const e = parsePropertyEquipment({
+      id: "22",
+      make: "Acme HVAC",
+      property_id: 1,
+      unit_id: 2,
+      category_id: 3,
+      model_number: null,
+      vin_number: "SN-001",
+      price: null,
+      install_date: null,
+      warranty_expiration_date: null,
+      life_time_warranty: false,
+      notes: null,
+      created_at: "2025-12-01T14:44:03.000000Z",
+      updated_at: "2025-12-01T14:44:03.000000Z",
+    });
+    expect(e).toMatchObject({
+      id: 22,
+      make: "Acme HVAC",
+      propertyId: 1,
+      unitId: 2,
+      categoryId: 3,
+      vinNumber: "SN-001",
+      lifeTimeWarranty: false,
+    });
+    expect(e.installDate).toBeNull();
+    expect(e.createdAt).toBeInstanceOf(Date);
+  });
+});
+
+describe("portfolio client paths", () => {
+  it("lists keys with a property_id filter and parses items", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [{ type: "property_key", id: "1", attributes: { keyname: "Front Door", type: 1 } }],
+        meta: { pagination: { total: 1, current_page: 1, per_page: 12, total_pages: 1 } },
+      }),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const { items, total } = await client.portfolio.keys.list({ propertyId: 123 });
+
+    expect(total).toBe(1);
+    expect(items[0]?.keyname).toBe("Front Door");
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("/property/keys");
+    expect(url).toContain(`${encodeURIComponent("filter[property_id]")}=123`);
+  });
+
+  it("creates equipment via the property_equipment JSON:API type", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        { data: { type: "property_equipment", id: "9", attributes: { make: "Carrier", property_id: 5 } } },
+        201,
+      ),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const eq = await client.portfolio.equipment.create({ property_id: 5, make: "Carrier" });
+
+    expect(eq?.id).toBe(9);
+    expect(eq?.make).toBe("Carrier");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.tenantcloud.com/property/equipment");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      data: { type: "property_equipment", attributes: { property_id: 5, make: "Carrier" } },
     });
   });
 });

@@ -245,6 +245,12 @@ so \`find_threads\` returns nothing for them. Resolve the lead via \`list_leads\
 - \`create_contact\` / \`update_contact\` / \`invite_contact\` (sends a portal invite - confirm first)
 - \`list_contact_insurances\`
 
+### Portfolio (Keys & Locks, Equipment)
+- \`list_property_keys\` (\`propertyId\`) - the actual door/lockbox codes usually live in each key's \`comment\` field
+- \`create_property_key\` (\`propertyId\`, \`keyname\`; optional \`comment\`, \`type\`), \`update_property_key\`, \`delete_property_key\`
+- \`list_equipment\` (\`propertyId\` / \`unitId\` / \`categoryId\`) - appliances, HVAC, water heaters, meters
+- \`create_equipment\` (\`propertyId\`; optional \`unitId\`, \`make\`, \`modelNumber\`, \`vinNumber\`, \`price\`, install/warranty dates), \`update_equipment\`, \`delete_equipment\`
+
 ### Anything else: \`tc_request\`
 For any endpoint without a dedicated tool, use \`tc_request\` (\`method\`, \`path\`, \`query\`, \`body\`).
 Read the \`tc://catalog\` resource for the full list of endpoint paths and JSON:API resource
