@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { TcClient } from "tenantcloud-client";
 import type { EntityCache } from "../entityCache.js";
 import { enrich } from "../entityEnricher.js";
-import { compact, pageParam, toolError, toolSuccess } from "./helpers.js";
+import { compact, maxResultsParam, pageParam, toolError, toolSuccess } from "./helpers.js";
 
 export function registerLeasingTools(server: McpServer, client: TcClient, cache: EntityCache): void {
   server.registerTool(
@@ -128,15 +128,74 @@ export function registerLeasingTools(server: McpServer, client: TcClient, cache:
   server.registerTool(
     "list_leads",
     {
-      description: "List leads (prospective tenants who inquired about listings).",
-      inputSchema: { status: z.string().optional(), page: pageParam },
+      description:
+        "List/find leads (prospective tenants who inquired about listings), most-recently-active first " +
+        "so the live pipeline surfaces at the top. To find ONE specific lead, pass `search` (name or " +
+        "email) - that is the reliable lookup. Filter by `type` (hot/warm/cold). `status` is filtered " +
+        "client-side because the API ignores a server-side status filter. To scope leads to a UNIT or " +
+        "PROPERTY, pass `unitId` and/or `propertyId` (or `listingIds` directly): a lead belongs to a " +
+        "marketing listing, so the tool resolves the listing(s) for that unit/property and filters by " +
+        "them - this is the only way to get 'leads for unit X'. `total` is the match count before " +
+        "status filtering; `scanned` is how many rows were examined; `listingIds` echoes what was used.",
+      inputSchema: {
+        search: z.string().optional().describe("Find leads by name or email (substring match)"),
+        type: z.string().optional().describe("Lead temperature: hot, warm, or cold"),
+        status: z
+          .string()
+          .optional()
+          .describe("Lead status, e.g. new, contacted, closed (filtered client-side)"),
+        propertyId: z
+          .number()
+          .int()
+          .optional()
+          .describe("Scope to leads for this property (resolved to its listings)"),
+        unitId: z
+          .number()
+          .int()
+          .optional()
+          .describe("Scope to leads for this unit (resolved to its listing(s))"),
+        listingIds: z
+          .array(z.number().int())
+          .optional()
+          .describe("Scope to leads for these marketing listing IDs directly"),
+        sort: z
+          .string()
+          .optional()
+          .describe('Sort field, default "-last_action_at" (most recent first); e.g. "last_action_at", "name"'),
+        maxResults: maxResultsParam,
+      },
     },
-    async ({ status, page }) => {
+    async ({ search, type, status, propertyId, unitId, listingIds, sort, maxResults }) => {
       try {
-        const filters: Record<string, string | number> = {};
-        if (status !== undefined) filters.status = status;
-        const { items, total } = await client.leasing.listLeads({ filters, page });
-        return toolSuccess({ data: items, count: items.length, total });
+        const ids = new Set<number>(listingIds ?? []);
+        if (propertyId !== undefined || unitId !== undefined) {
+          const resolved = await client.leasing.resolveListingIds({ propertyId, unitId });
+          for (const id of resolved) ids.add(id);
+          if (resolved.length === 0) {
+            return toolSuccess({
+              data: [],
+              count: 0,
+              total: 0,
+              listingIds: [],
+              note: "No marketing listings found for that property/unit, so there are no leads to scope to it.",
+            });
+          }
+        }
+        const scopeIds = [...ids];
+        const { items, total, scanned } = await client.leasing.listLeadsAll(maxResults ?? 50, {
+          search,
+          type,
+          status,
+          sort,
+          listingIds: scopeIds.length > 0 ? scopeIds : undefined,
+        });
+        return toolSuccess({
+          data: items,
+          count: items.length,
+          scanned,
+          total,
+          ...(scopeIds.length > 0 ? { listingIds: scopeIds } : {}),
+        });
       } catch (error) {
         return toolError(error);
       }

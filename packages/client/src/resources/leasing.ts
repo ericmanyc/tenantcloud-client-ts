@@ -51,6 +51,56 @@ export interface TcLead {
   lastActionAt: Date | null;
 }
 
+export interface LeadListOptions {
+  page?: number | undefined;
+  /** filter[search]: name or email substring. Honored server-side. */
+  search?: string | undefined;
+  /** filter[type]: hot, warm, or cold. Honored server-side. */
+  type?: string | undefined;
+  /**
+   * Lead status (new, contacted, closed, ...). The API silently ignores a
+   * server-side status filter, so listLeadsAll applies this client-side.
+   */
+  status?: string | undefined;
+  /**
+   * Scope leads to one or more marketing listings. This is the ONLY way to
+   * narrow leads to a unit/property: a lead belongs to a listing (which carries
+   * property_id/unit_id), so resolve listing ids first (resolveListingIds) and
+   * pass them here. Sent as filter[listing_ids][i] (the singular filter[*_id]
+   * forms the API silently ignores).
+   */
+  listingIds?: number[] | undefined;
+  /** Sort field. Defaults to "-last_action_at" (most recently active first). */
+  sort?: string | undefined;
+  signal?: AbortSignal | undefined;
+}
+
+/** A marketing listing - the link between a unit/property and its leads. */
+export interface TcListing {
+  id: number;
+  propertyId: number | null;
+  unitId: number | null;
+  /** 1 = listed/active, 0 = unlisted. */
+  status: number | null;
+  /** statistics.leads - the listing's reported lead count. */
+  leadCount: number | null;
+}
+
+export function parseListing(raw: Record<string, unknown>): TcListing {
+  const stats = pick(raw, "statistics");
+  const leadCount =
+    stats && typeof stats === "object"
+      ? toNumberOrNull((stats as Record<string, unknown>)["leads"])
+      : null;
+  return {
+    id: toNumber(pick(raw, "id") ?? 0),
+    propertyId: toNumberOrNull(pick(raw, "property_id")),
+    unitId: toNumberOrNull(pick(raw, "unit_id")),
+    status: toNumberOrNull(pick(raw, "status")),
+    leadCount,
+  };
+}
+
 export function parseLead(raw: Record<string, unknown>): TcLead {
   const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
   return {
@@ -393,20 +443,117 @@ export class LeasingClient {
 
   // --- Leads ---
 
+  // Verified live against /leads: `sort` (e.g. "-last_action_at"),
+  // `filter[search]` (name/email substring), `filter[type]` (hot/warm/cold) and
+  // `filter[listing_ids][i]` (scope to listings) are honored. `filter[status]`
+  // and the SINGULAR `filter[unit_id|property_id|listing_id]` are SILENTLY
+  // IGNORED (the API returns the full set), so we never send them - status is
+  // filtered client-side in listLeadsAll, and unit/property scoping goes through
+  // listing ids (resolveListingIds). The default order is oldest first, which
+  // buries the live pipeline, so we default to most-recent-active.
+
+  /** Single page of leads. Only sends filters the API actually honors. */
   async listLeads(
-    options: {
-      page?: number | undefined;
-      filters?: Record<string, string | number> | undefined;
-      signal?: AbortSignal | undefined;
-    } = {},
+    options: LeadListOptions = {},
   ): Promise<{ items: TcLead[]; total: number }> {
-    const query: Record<string, string | number | undefined> = { page: options.page };
-    for (const [k, v] of Object.entries(options.filters ?? {})) query[`filter[${k}]`] = v;
+    const query: Record<string, string | number | undefined> = {
+      page: options.page,
+      sort: options.sort ?? "-last_action_at",
+    };
+    if (options.search !== undefined) query["filter[search]"] = options.search;
+    if (options.type !== undefined) query["filter[type]"] = options.type;
+    // The API only honors the indexed-array form filter[listing_ids][0], [1], ...
+    options.listingIds?.forEach((id, i) => {
+      query[`filter[listing_ids][${i}]`] = id;
+    });
     const payload = await this.http.request("GET", withQuery("/leads", query), {
       signal: options.signal,
     });
     const { items, pagination } = parseJsonApiList(payload);
     return { items: items.map(parseLead), total: pagination.total };
+  }
+
+  // --- Listings (the bridge from a unit/property to its leads) ---
+
+  /** Single page of marketing listings. */
+  async listListings(
+    options: { page?: number | undefined; signal?: AbortSignal | undefined } = {},
+  ): Promise<{ items: TcListing[]; total: number }> {
+    const payload = await this.http.request(
+      "GET",
+      withQuery("/listings", { page: options.page }),
+      { signal: options.signal },
+    );
+    const { items, pagination } = parseJsonApiList(payload);
+    return { items: items.map(parseListing), total: pagination.total };
+  }
+
+  /** Fetch every page of listings up to maxResults. */
+  async listAllListings(maxResults = 300, signal?: AbortSignal): Promise<TcListing[]> {
+    const result: TcListing[] = [];
+    let page = 1;
+    while (result.length <= maxResults) {
+      signal?.throwIfAborted();
+      const { items, total } = await this.listListings({ page, signal });
+      result.push(...items);
+      page += 1;
+      if (result.length >= total || items.length === 0) break;
+    }
+    return result;
+  }
+
+  /**
+   * Resolve the listing ids for a property and/or unit by scanning listings
+   * (the API has no server-side listings filter). The result feeds
+   * LeadListOptions.listingIds to scope leads to that unit/property.
+   */
+  async resolveListingIds(
+    opts: { propertyId?: number | undefined; unitId?: number | undefined; signal?: AbortSignal | undefined } = {},
+  ): Promise<number[]> {
+    if (opts.propertyId === undefined && opts.unitId === undefined) return [];
+    const listings = await this.listAllListings(1000, opts.signal);
+    return listings
+      .filter(
+        (l) =>
+          (opts.propertyId === undefined || l.propertyId === opts.propertyId) &&
+          (opts.unitId === undefined || l.unitId === opts.unitId),
+      )
+      .map((l) => l.id);
+  }
+
+  /**
+   * Page through leads (most-recently-active first by default) up to maxResults.
+   * Applies the `status` filter client-side because the API ignores a server
+   * status filter. `total` is the server-side match count (search/type are
+   * honored, status is not); `scanned` is how many rows were examined to gather
+   * the matches (relevant only when status-filtering, which can stop early).
+   */
+  async listLeadsAll(
+    maxResults = 100,
+    options: LeadListOptions = {},
+  ): Promise<{ items: TcLead[]; total: number; scanned: number }> {
+    const wantStatus = options.status?.trim().toLowerCase();
+    const collected: TcLead[] = [];
+    let page = 1;
+    let total = 0;
+    let scanned = 0;
+    // With no status filter we only need maxResults rows; with one, scan further
+    // (recent-first clusters active leads up front) but stay bounded.
+    const scanCap = wantStatus ? Math.max(maxResults * 5, 60) : maxResults;
+    while (collected.length < maxResults && scanned < scanCap) {
+      options.signal?.throwIfAborted();
+      const { items, total: t } = await this.listLeads({ ...options, page });
+      total = t;
+      scanned += items.length;
+      for (const lead of items) {
+        if (wantStatus && (lead.status ?? "").toLowerCase() !== wantStatus) continue;
+        collected.push(lead);
+        if (collected.length >= maxResults) break;
+      }
+      page += 1;
+      if (scanned >= total || items.length === 0) break;
+    }
+    return { items: collected, total, scanned };
   }
 
   async createLead(

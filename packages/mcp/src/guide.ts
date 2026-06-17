@@ -248,13 +248,23 @@ Team members/sub-admins are not in \`list_contacts\`; their threads are in the \
 channel. Prospective tenants are in the \`leads\` channel.
 
 **Messaging a lead (first contact)** -> a lead who has never been messaged has NO thread,
-so \`find_threads\` returns nothing for them. Resolve the lead via \`list_leads\` -> call
-\`message_lead\` with the lead's \`id\`; it creates the thread and sends in one step.
+so \`find_threads\` returns nothing for them. Resolve the lead via \`list_leads\` (use
+\`search\` with their name/email) -> call \`message_lead\` with the lead's \`id\`; it creates
+the thread and sends in one step.
+
+**Finding leads**: \`list_leads\` returns the most-recently-active first, so the live
+pipeline (new/hot inquiries) is on top - the raw API order is oldest-first and buries it.
+To find one person, pass \`search\` (name or email). \`type\` (hot/warm/cold) filters
+server-side; \`status\` (new/contacted/closed) is filtered client-side because the API
+silently ignores a server status filter. To get "leads for unit X / property Y", pass
+\`unitId\`/\`propertyId\` (or \`listingIds\` directly): a lead belongs to a marketing
+listing, so the tool resolves that unit/property's listing(s) and scopes by them. Only the
+listing path works - the singular \`filter[unit_id|property_id|listing_id]\` forms are
+silently ignored; the honored form is \`filter[listing_ids][i]\`. \`total\` is the match
+count before status filtering; \`listingIds\` in the result echoes the scope used.
 
 **SMS limits**: messages to tenant and lead threads are delivered as SMS - keep them
-under ~1000 characters, and a single thread caps at ~15 outbound messages. \`list_leads\`
-is paged 12 per page and ignores a \`status\` filter (it returns every status), so filter
-lead status yourself after fetching.
+under ~1000 characters, and a single thread caps at ~15 outbound messages.
 
 ### Maintenance
 - \`list_maintenance_requests\` (filters: \`propertyId\`, \`clientId\`, \`status\`, \`priority\`, \`assigneeId\`)
@@ -287,7 +297,7 @@ future lease that still requires signatures is an unsigned renewal.
 - \`list_lease_notices\` (\`leaseId\`)
 - \`list_applications\` / \`create_application\` / \`submit_application\` (\`id\`)
 - \`list_screenings\` / \`create_screening\` (may incur a fee) / \`cancel_screening\`
-- \`list_leads\`, \`create_lead\`
+- \`list_leads\` (recent-first; \`search\` name/email, \`type\` hot/warm/cold, \`status\` client-side, \`unitId\`/\`propertyId\`/\`listingIds\` to scope) / \`create_lead\`
 
 ### Productivity, Documents & Contacts
 - \`list_tasks\`, \`create_task\` (\`title\`, \`remindDate\` required), \`complete_task\`, \`delete_task\`

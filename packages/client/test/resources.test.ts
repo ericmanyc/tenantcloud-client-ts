@@ -240,6 +240,143 @@ describe("TcClient write paths", () => {
   });
 });
 
+describe("lead listing", () => {
+  // Synthetic leads only - never real customer data (see CLAUDE.md).
+  function leadsPage(
+    leads: Array<{ id: number; name: string; status: string }>,
+    total: number,
+    perPage = 12,
+  ): Response {
+    return jsonResponse({
+      data: leads.map((l) => ({
+        type: "lead",
+        id: String(l.id),
+        attributes: { name: l.name, email: null, phone: null, status: l.status, type: "hot" },
+      })),
+      meta: { pagination: { total, count: leads.length, per_page: perPage } },
+    });
+  }
+
+  it("defaults to most-recent-active sort and only sends honored filters", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(leadsPage([{ id: 1, name: "Jane Doe", status: "new" }], 1));
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    await client.leasing.listLeads({ search: "jane", type: "hot" });
+
+    const url = fetchMock.mock.calls[0]![0] as string;
+    expect(url).toContain("sort=-last_action_at");
+    expect(url).toContain("filter%5Bsearch%5D=jane");
+    expect(url).toContain("filter%5Btype%5D=hot");
+    // The API ignores these, so we must never send them.
+    expect(url).not.toContain("filter%5Bstatus%5D");
+    expect(url).not.toContain("filter%5Bproperty_id%5D");
+  });
+
+  it("filters status client-side across pages and reports scan/total", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        leadsPage(
+          [
+            { id: 1, name: "A One", status: "new" },
+            { id: 2, name: "B Two", status: "closed" },
+          ],
+          4,
+          2,
+        ),
+      )
+      .mockResolvedValueOnce(
+        leadsPage(
+          [
+            { id: 3, name: "C Three", status: "new" },
+            { id: 4, name: "D Four", status: "closed" },
+          ],
+          4,
+          2,
+        ),
+      );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const { items, total, scanned } = await client.leasing.listLeadsAll(50, { status: "new" });
+
+    expect(items.map((l) => l.id)).toEqual([1, 3]);
+    expect(total).toBe(4);
+    expect(scanned).toBe(4);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops paging once maxResults is reached", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        leadsPage(
+          [
+            { id: 1, name: "A One", status: "new" },
+            { id: 2, name: "B Two", status: "new" },
+          ],
+          100,
+          2,
+        ),
+      );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const { items } = await client.leasing.listLeadsAll(2);
+
+    expect(items).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("scopes leads by listing ids using the indexed-array filter form", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(leadsPage([{ id: 1, name: "Jane Doe", status: "new" }], 1));
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    await client.leasing.listLeads({ listingIds: [101, 202] });
+
+    const url = fetchMock.mock.calls[0]![0] as string;
+    // filter[listing_ids][0]=101 and filter[listing_ids][1]=202, URL-encoded.
+    expect(url).toContain("filter%5Blisting_ids%5D%5B0%5D=101");
+    expect(url).toContain("filter%5Blisting_ids%5D%5B1%5D=202");
+    // Never the singular form the API ignores.
+    expect(url).not.toContain("filter%5Blisting_id%5D");
+  });
+
+  it("resolves listing ids for a property/unit by scanning listings", async () => {
+    function listingsPage(
+      listings: Array<{ id: number; property_id: number; unit_id: number }>,
+      total: number,
+    ): Response {
+      return jsonResponse({
+        data: listings.map((l) => ({
+          type: "listings",
+          id: String(l.id),
+          attributes: { property_id: l.property_id, unit_id: l.unit_id, status: 1, statistics: { leads: 3 } },
+        })),
+        meta: { pagination: { total, count: listings.length, per_page: 10 } },
+      });
+    }
+    // Fresh Response per call - a Response body can only be read once.
+    const fetchMock = vi.fn().mockImplementation(() =>
+      listingsPage(
+        [
+          { id: 11, property_id: 700, unit_id: 900 },
+          { id: 12, property_id: 700, unit_id: 901 },
+          { id: 13, property_id: 701, unit_id: 902 },
+        ],
+        3,
+      ),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    expect(await client.leasing.resolveListingIds({ propertyId: 700 })).toEqual([11, 12]);
+    expect(await client.leasing.resolveListingIds({ unitId: 901 })).toEqual([12]);
+    expect(await client.leasing.resolveListingIds({})).toEqual([]);
+  });
+});
+
 describe("lease signing status", () => {
   function leaseSigningResponse() {
     return jsonResponse({

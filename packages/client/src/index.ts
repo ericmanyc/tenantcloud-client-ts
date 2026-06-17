@@ -98,8 +98,11 @@ export { FinancialsClient } from "./resources/financials.js";
 export {
   LeasingClient,
   parseLead,
+  parseListing,
+  type LeadListOptions,
   type RenterProfileKind,
   type TcLead,
+  type TcListing,
   type TcLeaseRoommate,
   type TcLeaseSigning,
 } from "./resources/leasing.js";
