@@ -297,7 +297,7 @@ future lease that still requires signatures is an unsigned renewal.
 - \`list_lease_notices\` (\`leaseId\`)
 - \`list_applications\` / \`create_application\` / \`submit_application\` (\`id\`)
 - \`list_screenings\` / \`create_screening\` (may incur a fee) / \`cancel_screening\`
-- \`list_leads\` (recent-first; \`search\` name/email, \`type\` hot/warm/cold, \`status\` client-side, \`unitId\`/\`propertyId\`/\`listingIds\` to scope) / \`create_lead\`
+- \`list_leads\` (recent-first; \`search\` name/email, \`type\` hot/warm/cold, \`status\` client-side, \`unitId\`/\`propertyId\`/\`listingIds\` to scope) / \`create_lead\` / \`update_lead_status\` (\`leadId\`, \`status\`: new/working/closed)
 
 ### Productivity, Documents & Contacts
 - \`list_tasks\`, \`create_task\` (\`title\`, \`remindDate\` required), \`complete_task\`, \`delete_task\`

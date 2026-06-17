@@ -344,6 +344,30 @@ describe("lead listing", () => {
     expect(url).not.toContain("filter%5Blisting_id%5D");
   });
 
+  it("updates lead status with a plain (non-JSON:API) body and parses the plain reply", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: 555,
+        name: "Jane Doe",
+        status: "working",
+        type: "hot",
+        meta: { last_action_at: "2026-06-17T16:13:22.000000Z" },
+      }),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const lead = await client.leasing.updateLeadStatus(555, "working");
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.tenantcloud.com/landlord/leads/555");
+    expect(init.method).toBe("PATCH");
+    // Plain body the web app sends - NOT a JSON:API { data: { type, attributes } } envelope.
+    expect(JSON.parse(init.body as string)).toEqual({ status: "working" });
+    expect(lead?.status).toBe("working");
+    // last_action_at is nested under meta on the landlord detail shape.
+    expect(lead?.lastActionAt).toBeInstanceOf(Date);
+  });
+
   it("resolves listing ids for a property/unit by scanning listings", async () => {
     function listingsPage(
       listings: Array<{ id: number; property_id: number; unit_id: number }>,

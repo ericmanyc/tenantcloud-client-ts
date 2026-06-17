@@ -245,6 +245,7 @@ describe("tc-mcp server", () => {
       "get_lease_signing_status",
       "list_applications",
       "list_leads",
+      "update_lead_status",
       "tc_request",
     ]) {
       expect(names).toContain(added);

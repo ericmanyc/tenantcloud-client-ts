@@ -222,4 +222,26 @@ export function registerLeasingTools(server: McpServer, client: TcClient, cache:
       }
     },
   );
+
+  server.registerTool(
+    "update_lead_status",
+    {
+      description:
+        "Move a lead through its pipeline by setting its status. Known values: 'new', 'working', " +
+        "'closed' (other values may exist in this account). Use the lead's id from list_leads.",
+      inputSchema: {
+        leadId: z.number().int().describe("Lead ID (from list_leads)"),
+        status: z.string().describe("New status, e.g. new, working, closed"),
+      },
+    },
+    async ({ leadId, status }) => {
+      try {
+        const lead = await client.leasing.updateLeadStatus(leadId, status);
+        if (!lead) return toolError(`could not update status for lead ${leadId}`);
+        return toolSuccess({ updated: true, lead });
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
 }

@@ -103,6 +103,14 @@ export function parseListing(raw: Record<string, unknown>): TcListing {
 
 export function parseLead(raw: Record<string, unknown>): TcLead {
   const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
+  // The list serializes last_action_at at the top level; the landlord detail
+  // (`/landlord/leads/{id}`) nests it under `meta`. Accept either.
+  const meta = pick(raw, "meta");
+  const lastAction =
+    pick(raw, "last_action_at") ??
+    (meta && typeof meta === "object"
+      ? (meta as Record<string, unknown>)["last_action_at"]
+      : undefined);
   return {
     id: toNumber(pick(raw, "id") ?? 0),
     name: s(pick(raw, "name")),
@@ -112,7 +120,7 @@ export function parseLead(raw: Record<string, unknown>): TcLead {
     type: s(pick(raw, "type")),
     source: s(pick(raw, "source")),
     status: s(pick(raw, "status")),
-    lastActionAt: parseTcDateOrNull(pick(raw, "last_action_at")),
+    lastActionAt: parseTcDateOrNull(lastAction),
   };
 }
 
@@ -570,17 +578,32 @@ export class LeasingClient {
 
   // Per-lead detail/update/delete live under the landlord namespace
   // (`/landlord/leads/{id}`); the bare `/leads/{id}` path does not exist.
+  // This endpoint is NOT JSON:API: the body is a plain object of attributes
+  // (e.g. {"status":"working"}) and the response is a plain lead object.
   async updateLead(
     id: number,
     attributes: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<TcLead | null> {
     const payload = await this.http.request("PATCH", `/landlord/leads/${id}`, {
-      body: jsonApiBody("lead", attributes, id),
+      body: attributes,
       signal,
     });
-    const one = parseJsonApiOne(payload);
-    return one ? parseLead(one) : null;
+    const data = (payload as { data?: Record<string, unknown> })?.data ?? payload;
+    return data && typeof data === "object" ? parseLead(data as Record<string, unknown>) : null;
+  }
+
+  /**
+   * Move a lead through its pipeline by setting its status. Known values:
+   * "new", "working", "closed" (others may exist). PATCHes the plain
+   * {"status": ...} body the web app sends.
+   */
+  async updateLeadStatus(
+    leadId: number,
+    status: string,
+    signal?: AbortSignal,
+  ): Promise<TcLead | null> {
+    return this.updateLead(leadId, { status }, signal);
   }
 
   async deleteLead(id: number, signal?: AbortSignal): Promise<void> {
