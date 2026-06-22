@@ -122,10 +122,24 @@ export class LeasesSource extends PaginatedSource<TcLease> {
     return this.withExtra("&filter[lease_status][]=active");
   }
 
+  /**
+   * Future leases (lease_status 1) - renewals and not-yet-started leases. These
+   * do NOT appear under onlyActive(), so a renewal tracker must ask for them
+   * explicitly. Verified live: `filter[lease_status][]=future` returns only
+   * lease_status:1 records.
+   */
+  onlyFuture(): this {
+    return this.withExtra("&filter[lease_status][]=future");
+  }
+
   forProperty(propertyId: number): this {
     return this.withExtra(`&filter[property_id][]=${propertyId}`);
   }
 
+  // NOTE: there is intentionally no forTenant() here. `filter[tenant_id]` /
+  // `filter[user_client_id]` on /leases is unreliable - it returns records that
+  // do not belong to the tenant - so scope leases by unit (forUnit) instead and
+  // match the tenant client-side on user_client_id.
   forUnit(unitId: number): this {
     return this.withExtra(`&filter[unit_id]=${unitId}`);
   }

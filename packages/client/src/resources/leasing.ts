@@ -172,6 +172,45 @@ export interface TcLeaseSigning {
   summary: string;
 }
 
+/**
+ * The renewal outcome for a lease: whether a successor exists on the unit and,
+ * if so, its key terms and signing state. `status` is "renewed" once the
+ * renewal needs no signature or is fully signed, "awaiting_sig" while signatures
+ * are still outstanding, and "no_renewal" when no successor was found.
+ */
+export interface TcLeaseRenewal {
+  found: boolean;
+  /** The lease the renewal was looked up for. */
+  baseLeaseId: number;
+  renewalLeaseId?: number | undefined;
+  tenantId?: number | null | undefined;
+  /** Renewal start date, ISO (YYYY-MM-DD). */
+  rentFrom?: string | undefined;
+  /** Renewal end date, ISO (YYYY-MM-DD), or null if open-ended. */
+  rentTo?: string | null | undefined;
+  rent?: number | null | undefined;
+  status: "renewed" | "awaiting_sig" | "no_renewal";
+  /** Names/emails still needed when status is "awaiting_sig". */
+  pendingSigners?: string[] | undefined;
+  summary: string;
+}
+
+/**
+ * Format a lease Date as an ISO calendar date (YYYY-MM-DD) using its local
+ * components. parseTcDate builds dates at local midnight, so reading the local
+ * Y/M/D round-trips the original "2026-07-01" without a timezone shift (which
+ * toISOString would introduce in negative-offset zones).
+ */
+function isoDate(date: Date | null | undefined): string | undefined {
+  if (!date) {
+    return undefined;
+  }
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 interface RawRelationship {
   data?: { id?: unknown } | Array<{ id?: unknown }> | null;
 }
@@ -289,6 +328,108 @@ export class LeasingClient {
       .filter((it) => String(it.type) === "lease_roommate")
       .map((it) => parseLeaseRoommate(it, contactsById));
     return summarizeSigning(toNumber(env.data.id ?? id), leaseStatus, roommates);
+  }
+
+  /**
+   * Every lease on a unit, regardless of status. The `/leases` list with
+   * `filter[unit_id]` carries no implicit status filter (verified live), so
+   * this surfaces the full chain - active, future renewals and ended leases -
+   * which is what renewal tracing needs. Pages until maxResults or exhaustion.
+   */
+  async listLeasesForUnit(unitId: number, maxResults = 200, signal?: AbortSignal): Promise<TcLease[]> {
+    const result: TcLease[] = [];
+    let page = 1;
+    while (result.length < maxResults) {
+      signal?.throwIfAborted();
+      const payload = await this.http.request(
+        "GET",
+        withQuery("/leases", { "filter[unit_id]": unitId, page }),
+        { signal },
+      );
+      const { items, pagination } = parseJsonApiList(payload);
+      result.push(...items.map(parseLease));
+      page += 1;
+      if (result.length >= pagination.total || items.length === 0) {
+        break;
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Resolve a lease's renewal: the future lease that replaces it on the same
+   * unit, plus that renewal's signing state.
+   *
+   * Matching: `previous_lease_id === leaseId` is the authoritative signal and is
+   * tried first - it is the only reliable link on multi-tenant units (one lease
+   * per room), where several future leases can coexist for different tenants.
+   * When nothing points back at this lease, fall back to a future lease for the
+   * SAME tenant that starts after it. Returns null only when the base lease does
+   * not exist (so the tool can report "lease not found"); a missing renewal is a
+   * found:false result with status "no_renewal".
+   */
+  async getLeaseRenewal(leaseId: number, signal?: AbortSignal): Promise<TcLeaseRenewal | null> {
+    const base = await this.getLease(leaseId, signal);
+    if (!base) {
+      return null;
+    }
+    const others = (await this.listLeasesForUnit(base.unitId, 200, signal)).filter(
+      (l) => l.id !== base.id,
+    );
+
+    let candidates = others.filter((l) => l.previousLeaseId === leaseId);
+    if (candidates.length === 0) {
+      candidates = others.filter(
+        (l) =>
+          l.tenantId !== null &&
+          l.tenantId === base.tenantId &&
+          l.status === "future" &&
+          l.startDate.getTime() > base.startDate.getTime(),
+      );
+    }
+
+    if (candidates.length === 0) {
+      return {
+        found: false,
+        baseLeaseId: leaseId,
+        status: "no_renewal",
+        summary: `No renewal lease was found for lease ${leaseId} on unit ${base.unitId}.`,
+      };
+    }
+
+    // Prefer a future (lease_status 1) candidate, then the earliest start - the
+    // immediate successor rather than a later one further down the chain.
+    candidates.sort((a, b) => {
+      const af = a.status === "future" ? 0 : 1;
+      const bf = b.status === "future" ? 0 : 1;
+      if (af !== bf) return af - bf;
+      return a.startDate.getTime() - b.startDate.getTime();
+    });
+    const renewal = candidates[0]!;
+
+    const signing = await this.getLeaseSigning(renewal.id, signal);
+    const signatureRequired = signing?.signatureRequired ?? false;
+    const allSigned = signing?.allSigned ?? false;
+    const status: TcLeaseRenewal["status"] = !signatureRequired || allSigned ? "renewed" : "awaiting_sig";
+    const pendingSigners = signing?.pendingSigners ?? [];
+
+    const summary =
+      status === "renewed"
+        ? `Lease ${leaseId} has been renewed by lease ${renewal.id}${signatureRequired ? " (fully signed)" : " (no signature required)"}.`
+        : `Lease ${leaseId} has a renewal (lease ${renewal.id}) that is awaiting signature${pendingSigners.length > 0 ? ` from: ${pendingSigners.join(", ")}` : ""}.`;
+
+    return {
+      found: true,
+      baseLeaseId: leaseId,
+      renewalLeaseId: renewal.id,
+      tenantId: renewal.tenantId,
+      rentFrom: isoDate(renewal.startDate),
+      rentTo: isoDate(renewal.endDate),
+      rent: renewal.rent,
+      status,
+      pendingSigners,
+      summary,
+    };
   }
 
   async createLease(

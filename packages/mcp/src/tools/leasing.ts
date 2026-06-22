@@ -40,6 +40,30 @@ export function registerLeasingTools(server: McpServer, client: TcClient, cache:
   );
 
   server.registerTool(
+    "get_lease_renewal",
+    {
+      description:
+        "Resolve a lease's renewal in one call: finds the future lease that replaces it on the same " +
+        "unit and reports that renewal's signing state. Replaces the manual 2-3 call chain (list the " +
+        "unit's leases, match the successor, then check signing). Returns { found, renewalLeaseId, " +
+        "tenantId, rentFrom, rentTo, rent, status, pendingSigners }. status is 'renewed' (a renewal " +
+        "exists and needs no signature or is fully signed), 'awaiting_sig' (renewal exists but " +
+        "signatures are still outstanding - see pendingSigners), or 'no_renewal' (no successor found). " +
+        "Matching uses previous_lease_id first (the only reliable link on multi-tenant units with one " +
+        "lease per room), falling back to a future lease for the same tenant that starts later.",
+      inputSchema: { leaseId: z.number().int().describe("The current/expiring lease ID to find a renewal for") },
+    },
+    async ({ leaseId }) => {
+      try {
+        const renewal = await client.leasing.getLeaseRenewal(leaseId);
+        return renewal ? toolSuccess(renewal) : toolError(`lease ${leaseId} not found`);
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "update_lease",
     {
       description: "Update fields on an existing lease (e.g. rent amount, end date, name).",

@@ -103,6 +103,7 @@ export {
   type RenterProfileKind,
   type TcLead,
   type TcListing,
+  type TcLeaseRenewal,
   type TcLeaseRoommate,
   type TcLeaseSigning,
 } from "./resources/leasing.js";

@@ -243,6 +243,7 @@ describe("tc-mcp server", () => {
       "get_transaction_statistics",
       "get_lease",
       "get_lease_signing_status",
+      "get_lease_renewal",
       "list_applications",
       "list_leads",
       "update_lead_status",

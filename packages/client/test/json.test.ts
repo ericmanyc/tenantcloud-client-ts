@@ -220,6 +220,41 @@ describe("parseLease", () => {
     expect(lease.endDate).toBeNull();
     expect(lease.status).toBe("active");
     expect(lease.startDate.getMonth()).toBe(1);
+    expect(lease.previousLeaseId).toBeNull();
+    expect(lease.rent).toBeNull();
+  });
+
+  it("captures previous_lease_id and prefers temp_transactions rent over a zero top-level amount", () => {
+    const lease = parseLease({
+      id: 1608126,
+      created_at: "2026-06-22T17:21:13Z",
+      rent_from: "2026-07-01",
+      rent_to: "2027-06-30",
+      unit_id: 1308432,
+      user_client_id: 3009598,
+      lease_status: 1,
+      previous_lease_id: 1601718,
+      amount: 0,
+      temp_transactions: { rent: { amount: 1600 } },
+    });
+
+    expect(lease.status).toBe("future");
+    expect(lease.previousLeaseId).toBe(1601718);
+    expect(lease.rent).toBe(1600);
+  });
+
+  it("falls back to a positive top-level amount when no rent recurring item exists", () => {
+    const lease = parseLease({
+      id: 7,
+      created_at: "2026-01-01T00:00:00Z",
+      rent_from: "2026-01-01",
+      unit_id: 5,
+      user_client_id: 9,
+      lease_status: "active",
+      amount: 1000,
+    });
+
+    expect(lease.rent).toBe(1000);
   });
 });
 
