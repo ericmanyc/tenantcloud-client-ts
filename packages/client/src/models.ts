@@ -211,6 +211,31 @@ export interface TcLease {
   unitId: number;
   tenantId: number | null;
   status: TcLeaseStatus;
+  /** The lease this one renewed/replaced, when set. Drives renewal chains. */
+  previousLeaseId: number | null;
+  /** Monthly rent. The top-level `amount` is often 0; the real figure lives on the rent recurring item. */
+  rent: number | null;
+}
+
+/**
+ * Monthly rent for a lease. The top-level `amount` attribute is unreliable
+ * (frequently 0 on active leases); the authoritative figure is the rent
+ * recurring item under `temp_transactions.rent.amount`. Prefer that, fall back
+ * to a positive top-level `amount`, else null when neither is meaningful.
+ */
+function parseLeaseRent(raw: Record<string, unknown>): number | null {
+  const tt = pick(raw, "temp_transactions");
+  if (tt !== null && typeof tt === "object") {
+    const rentItem = (tt as Record<string, unknown>)["rent"];
+    if (rentItem !== null && typeof rentItem === "object") {
+      const amount = toNumberOrNull((rentItem as Record<string, unknown>)["amount"]);
+      if (amount !== null && amount > 0) {
+        return amount;
+      }
+    }
+  }
+  const top = toNumberOrNull(pick(raw, "amount"));
+  return top !== null && top > 0 ? top : null;
 }
 
 export function parseLease(raw: Record<string, unknown>): TcLease {
@@ -224,6 +249,8 @@ export function parseLease(raw: Record<string, unknown>): TcLease {
     unitId: toNumber(pick(raw, "unit_id") ?? 0),
     tenantId: toNumberOrNull(pick(raw, "user_client_id")),
     status: parseLeaseStatus(pick(raw, "lease_status")),
+    previousLeaseId: toNumberOrNull(pick(raw, "previous_lease_id")),
+    rent: parseLeaseRent(raw),
   };
 }
 

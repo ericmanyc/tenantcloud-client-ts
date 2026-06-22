@@ -235,11 +235,20 @@ export function createServer(client: TcClient, options: ServerOptions = {}): Mcp
   server.registerTool(
     "list_leases",
     {
-      description: "List leases from TenantCloud. Can filter by property, unit, or status.",
+      description:
+        "List leases from TenantCloud. Filter by property, unit, or status. status: 'active' " +
+        "(current leases only - the default-feeling view, but it EXCLUDES renewals), 'future' " +
+        "(renewals and not-yet-started leases, lease_status 1), or 'all' (every status). To trace a " +
+        "renewal, list by unitId with status 'all' (or 'future'): a renewal carries previousLeaseId " +
+        "pointing at the lease it replaces. To find one tenant's lease, scope by unitId and match on " +
+        "tenantId - filtering /leases by tenant directly is unreliable.",
       inputSchema: {
         propertyId: z.number().int().optional().describe("Filter by property ID"),
         unitId: z.number().int().optional().describe("Filter by unit ID"),
-        status: z.enum(["active"]).optional().describe("Filter by status: active"),
+        status: z
+          .enum(["active", "future", "all"])
+          .optional()
+          .describe("Filter by status: active (current), future (renewals/upcoming), or all"),
         maxResults: maxResultsParam,
       },
     },
@@ -254,7 +263,10 @@ export function createServer(client: TcClient, options: ServerOptions = {}): Mcp
         }
         if (status === "active") {
           source = source.onlyActive();
+        } else if (status === "future") {
+          source = source.onlyFuture();
         }
+        // status === "all" (or undefined) applies no lease_status filter.
 
         const data = await source.getAll(maxResults ?? 100);
         const result = await enrich(

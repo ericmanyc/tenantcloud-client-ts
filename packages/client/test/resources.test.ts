@@ -474,3 +474,154 @@ describe("lease signing status", () => {
     expect(signing?.summary).toContain("No signatures are required");
   });
 });
+
+describe("lease renewal", () => {
+  // Minimal lease attributes; created_at and rent_from are required by parseLease.
+  function leaseAttrs(over: Record<string, unknown>): Record<string, unknown> {
+    return {
+      created_at: "2025-06-01T00:00:00Z",
+      rent_from: "2025-06-01",
+      lease_status: 0,
+      ...over,
+    };
+  }
+
+  // Routes the three calls getLeaseRenewal makes by URL: single lease (getLease),
+  // the unit's lease list (filter[unit_id]), and the signing fetch (include=).
+  function renewalFetch(opts: {
+    base: { id: number; attributes: Record<string, unknown> };
+    unitLeases: Array<{ id: number; attributes: Record<string, unknown> }>;
+    signing?: { roommates: Array<Record<string, unknown>>; leaseStatus?: string };
+  }) {
+    return vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("include=")) {
+        const included = (opts.signing?.roommates ?? []).map((a, i) => ({
+          type: "lease_roommate",
+          id: String(i + 1),
+          attributes: a,
+        }));
+        return jsonResponse({
+          data: { type: "leases", id: "0", attributes: { lease_status: opts.signing?.leaseStatus ?? "future" } },
+          included,
+        });
+      }
+      if (url.includes("unit_id")) {
+        const data = opts.unitLeases.map((l) => ({ type: "leases", id: String(l.id), attributes: l.attributes }));
+        return jsonResponse({
+          data,
+          meta: { pagination: { total: data.length, count: data.length, per_page: 50, current_page: 1, total_pages: 1 } },
+        });
+      }
+      return jsonResponse({ data: { type: "leases", id: String(opts.base.id), attributes: opts.base.attributes } });
+    });
+  }
+
+  it("reports renewed via previous_lease_id when no signature is required", async () => {
+    const fetchMock = renewalFetch({
+      base: { id: 100, attributes: leaseAttrs({ unit_id: 50, user_client_id: 9, lease_status: 0 }) },
+      unitLeases: [
+        { id: 100, attributes: leaseAttrs({ unit_id: 50, user_client_id: 9, lease_status: 0 }) },
+        {
+          id: 200,
+          attributes: leaseAttrs({
+            unit_id: 50,
+            user_client_id: 9,
+            lease_status: 1,
+            previous_lease_id: 100,
+            rent_from: "2026-06-01",
+            rent_to: "2027-05-31",
+            temp_transactions: { rent: { amount: 1700 } },
+          }),
+        },
+      ],
+      signing: { roommates: [{ is_signature_required: false, steps_info: { agreement: true } }] },
+    });
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const renewal = await client.leasing.getLeaseRenewal(100);
+
+    expect(renewal?.found).toBe(true);
+    expect(renewal?.renewalLeaseId).toBe(200);
+    expect(renewal?.status).toBe("renewed");
+    expect(renewal?.rentFrom).toBe("2026-06-01");
+    expect(renewal?.rentTo).toBe("2027-05-31");
+    expect(renewal?.rent).toBe(1700);
+    expect(renewal?.tenantId).toBe(9);
+  });
+
+  it("reports awaiting_sig when the renewal still needs signatures", async () => {
+    const fetchMock = renewalFetch({
+      base: { id: 100, attributes: leaseAttrs({ unit_id: 50, user_client_id: 9 }) },
+      unitLeases: [
+        {
+          id: 200,
+          attributes: leaseAttrs({
+            unit_id: 50,
+            user_client_id: 9,
+            lease_status: 1,
+            previous_lease_id: 100,
+            rent_from: "2026-06-01",
+          }),
+        },
+      ],
+      signing: {
+        roommates: [
+          { is_signature_required: true, steps_info: { agreement: false }, name: "Bob Tenant" },
+        ],
+      },
+    });
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const renewal = await client.leasing.getLeaseRenewal(100);
+
+    expect(renewal?.found).toBe(true);
+    expect(renewal?.renewalLeaseId).toBe(200);
+    expect(renewal?.status).toBe("awaiting_sig");
+    expect(renewal?.pendingSigners).toEqual(["Bob Tenant"]);
+  });
+
+  it("falls back to a same-tenant future lease when previous_lease_id is unset", async () => {
+    const fetchMock = renewalFetch({
+      base: { id: 100, attributes: leaseAttrs({ unit_id: 50, user_client_id: 9, rent_from: "2025-06-01" }) },
+      unitLeases: [
+        // Different tenant's future lease on a shared unit - must NOT be picked.
+        { id: 300, attributes: leaseAttrs({ unit_id: 50, user_client_id: 77, lease_status: 1, rent_from: "2026-06-01" }) },
+        // Same tenant, future, starts after the base - the real renewal.
+        { id: 200, attributes: leaseAttrs({ unit_id: 50, user_client_id: 9, lease_status: 1, rent_from: "2026-06-01" }) },
+      ],
+      signing: { roommates: [{ is_signature_required: false, steps_info: { agreement: true } }] },
+    });
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const renewal = await client.leasing.getLeaseRenewal(100);
+
+    expect(renewal?.found).toBe(true);
+    expect(renewal?.renewalLeaseId).toBe(200);
+  });
+
+  it("reports no_renewal when nothing succeeds the lease", async () => {
+    const fetchMock = renewalFetch({
+      base: { id: 100, attributes: leaseAttrs({ unit_id: 50, user_client_id: 9 }) },
+      unitLeases: [
+        { id: 100, attributes: leaseAttrs({ unit_id: 50, user_client_id: 9 }) },
+        // An older ended lease that does not point back at 100.
+        { id: 90, attributes: leaseAttrs({ unit_id: 50, user_client_id: 9, lease_status: 4, rent_from: "2024-06-01" }) },
+      ],
+    });
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const renewal = await client.leasing.getLeaseRenewal(100);
+
+    expect(renewal?.found).toBe(false);
+    expect(renewal?.status).toBe("no_renewal");
+    expect(renewal?.renewalLeaseId).toBeUndefined();
+  });
+
+  it("returns null when the base lease does not exist", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: null }));
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    expect(await client.leasing.getLeaseRenewal(999)).toBeNull();
+  });
+});
