@@ -224,9 +224,10 @@ const MAINTENANCE_STATUS_CODES: Record<number, TcMaintenanceStatus> = {
   1: "new",
   2: "in_progress",
   3: "resolved",
-  4: "archived",
-  5: "canceled",
-  6: "in_review",
+  // 4 is unused in the live workorder status enum (verified against the UI filter)
+  5: "archived",
+  6: "canceled",
+  7: "in_review",
 };
 
 export const MAINTENANCE_PRIORITIES = ["low", "normal", "high", "critical"] as const;

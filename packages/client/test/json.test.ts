@@ -113,7 +113,9 @@ describe("maintenance status normalizer (lenient)", () => {
   it("maps numeric codes and numeric strings to names", () => {
     expect(parseMaintenanceStatus(1)).toBe("new");
     expect(parseMaintenanceStatus(2)).toBe("in_progress");
-    expect(parseMaintenanceStatus(6)).toBe("in_review");
+    expect(parseMaintenanceStatus(5)).toBe("archived");
+    expect(parseMaintenanceStatus(6)).toBe("canceled");
+    expect(parseMaintenanceStatus(7)).toBe("in_review");
     expect(parseMaintenanceStatus("3")).toBe("resolved");
   });
 

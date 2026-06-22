@@ -130,7 +130,7 @@ Status: 0 due, 1 paid, 2 partial, 3 pending, 9 void, 10 with_balance, 11 overdue
 Category: income, expense, refund, credits, liability.
 
 ### Maintenance request status
-1 New, 2 In Progress, 3 Resolved, 4 Archived, 5 Canceled, 6 In Review.
+1 New, 2 In Progress, 3 Resolved, 5 Archived, 6 Canceled, 7 In Review (code 4 is unused).
 
 ### Maintenance priority
 1 Low, 2 Normal, 3 High, 4 Critical.
