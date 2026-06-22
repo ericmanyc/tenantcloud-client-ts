@@ -180,7 +180,7 @@ describe("maintenance list filters (status/priority names become numeric codes)"
     await client.maintenance.list({ status: "resolved", priority: "critical" });
 
     const url = String(fetchMock.mock.calls[0]![0]);
-    expect(url).toContain(`${encodeURIComponent("filter[status]")}=3`);
+    expect(url).toContain(`${encodeURIComponent("filter[statuses][0]")}=3`);
     expect(url).toContain(`${encodeURIComponent("filter[priority]")}=4`);
   });
 
@@ -193,7 +193,7 @@ describe("maintenance list filters (status/priority names become numeric codes)"
     await client.maintenance.list({ status: "waiting_on_parts" });
 
     const url = String(fetchMock.mock.calls[0]![0]);
-    expect(url).toContain(`${encodeURIComponent("filter[status]")}=waiting_on_parts`);
+    expect(url).toContain(`${encodeURIComponent("filter[statuses][0]")}=waiting_on_parts`);
   });
 });
 

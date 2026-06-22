@@ -113,7 +113,9 @@ export class MaintenanceClient {
     if (o.clientId !== undefined) q["filter[client_id]"] = o.clientId;
     // The API filters on numeric status/priority codes; accept a name or a code
     // and send the code when we recognize it, otherwise pass the value through.
-    if (o.status !== undefined) q["filter[status]"] = maintenanceStatusCode(o.status) ?? o.status;
+    // Status uses the plural array param `filter[statuses][]` (the singular
+    // `filter[status]` is silently ignored); priority uses singular `filter[priority]`.
+    if (o.status !== undefined) q["filter[statuses][0]"] = maintenanceStatusCode(o.status) ?? o.status;
     if (o.priority !== undefined) q["filter[priority]"] = maintenancePriorityCode(o.priority) ?? o.priority;
     if (o.assigneeId !== undefined) q["filter[assignee_id]"] = o.assigneeId;
     return q;
