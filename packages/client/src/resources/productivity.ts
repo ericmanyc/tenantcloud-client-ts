@@ -1,10 +1,16 @@
 /**
- * Productivity: tasks, calendar events, and notes. All JSON:API.
+ * Productivity: tasks, calendar events, notes, and the timeline feed.
  *
  * Endpoints:
- *   GET/POST   /tasks (+ /{id}, /statistics)
- *   GET/POST   /calendar_events
- *   GET/POST   /notes (+ /{id}) - notes are entity-scoped; list needs filters
+ *   GET/POST   /tasks (+ /{id}, /statistics) - JSON:API
+ *   GET/POST   /calendar_events - JSON:API
+ *   GET        /timeline - NOT JSON:API; plain params entity_id + entity_type
+ *              (numeric code) + optional filter tab; notes are read here
+ *   POST       /notes, PUT/DELETE /notes/{id} - NOT JSON:API; plain body with
+ *              resource_id + resource_type (same numeric codes)
+ *
+ * There is no GET /notes: the dashboard lists notes via GET /timeline with
+ * filter=notes.
  */
 import { parseTcDateOrNull, pick, toBoolean, toNumber } from "../json.js";
 import {
@@ -12,7 +18,6 @@ import {
   parseJsonApiList,
   parseJsonApiOne,
   withQuery,
-  type JsonApiList,
   type JsonApiRecord,
   type TcHttp,
 } from "./jsonApi.js";
@@ -131,43 +136,110 @@ export class ProductivityClient {
     await this.http.request("DELETE", `/calendar_events/${id}`, { signal });
   }
 
-  // --- Notes (entity-scoped) ---
+  // --- Timeline & notes (entity-scoped) ---
 
-  /** List notes. Notes attach to an entity, so pass filters (e.g. noteable_type/id). */
-  listNotes(
-    filters: Record<string, string | number> = {},
-    options: { page?: number | undefined; signal?: AbortSignal | undefined } = {},
-  ): Promise<JsonApiList> {
-    const query: Record<string, string | number | undefined> = { page: options.page };
-    for (const [k, v] of Object.entries(filters)) query[`filter[${k}]`] = v;
-    return this.http
-      .request("GET", withQuery("/notes", query), { signal: options.signal })
-      .then(parseJsonApiList);
+  /**
+   * Timeline/notes feed for an entity. `filter` selects the dashboard tab.
+   * Returns the raw payload: { pagination, list, unread_count, counts }.
+   */
+  async listTimeline(
+    entityType: TimelineEntityType | number,
+    entityId: number,
+    options: {
+      filter?: TimelineFilter | undefined;
+      page?: number | undefined;
+      take?: number | undefined;
+      signal?: AbortSignal | undefined;
+    } = {},
+  ): Promise<{ items: Record<string, unknown>[]; total: number; raw: unknown }> {
+    const payload = await this.http.request("GET", withQuery("/timeline", {
+      entity_id: entityId,
+      entity_type: resolveTimelineEntityType(entityType),
+      filter: options.filter,
+      page: options.page,
+      take: options.take,
+    }), { signal: options.signal });
+    const body = payload as {
+      list?: Record<string, unknown>[] | null;
+      pagination?: { total?: number } | null;
+    };
+    return {
+      items: body.list ?? [],
+      total: toNumber(body.pagination?.total ?? 0),
+      raw: payload,
+    };
   }
 
+  /** List notes attached to an entity (timeline feed filtered to the Notes tab). */
+  listNotes(
+    entityType: TimelineEntityType | number,
+    entityId: number,
+    options: { page?: number | undefined; take?: number | undefined; signal?: AbortSignal | undefined } = {},
+  ): Promise<{ items: Record<string, unknown>[]; total: number; raw: unknown }> {
+    return this.listTimeline(entityType, entityId, { ...options, filter: "notes" });
+  }
+
+  /** Create a note. Body is plain JSON: { resource_id, resource_type, text, ... }. */
   async createNote(
+    entityType: TimelineEntityType | number,
+    entityId: number,
     attributes: Record<string, unknown>,
     signal?: AbortSignal,
-  ): Promise<JsonApiRecord | null> {
-    return parseJsonApiOne(
-      await this.http.request("POST", "/notes", { body: jsonApiBody("note", attributes), signal }),
-    );
+  ): Promise<unknown> {
+    return this.http.request("POST", "/notes", {
+      body: {
+        ...attributes,
+        resource_id: entityId,
+        resource_type: resolveTimelineEntityType(entityType),
+      },
+      signal,
+    });
   }
 
   async updateNote(
     id: number,
     attributes: Record<string, unknown>,
     signal?: AbortSignal,
-  ): Promise<JsonApiRecord | null> {
-    return parseJsonApiOne(
-      await this.http.request("PATCH", `/notes/${id}`, {
-        body: jsonApiBody("note", attributes, id),
-        signal,
-      }),
-    );
+  ): Promise<unknown> {
+    return this.http.request("PUT", `/notes/${id}`, { body: { ...attributes, id }, signal });
   }
 
   async deleteNote(id: number, signal?: AbortSignal): Promise<void> {
     await this.http.request("DELETE", `/notes/${id}`, { signal });
   }
+}
+
+/** Dashboard tab names accepted by GET /timeline's `filter` param. */
+export type TimelineFilter = "all" | "notes" | "tasks" | "activity" | "files";
+
+/**
+ * Numeric entity codes for /timeline (entity_type) and /notes
+ * (resource_type), recovered from the dashboard bundle's timeline enum.
+ */
+export const TIMELINE_ENTITY_TYPES = {
+  lease: 1,
+  contact: 2,
+  application: 3,
+  user: 4,
+  maintenance: 5,
+  demo: 6,
+  ticket: 7,
+  lead: 8,
+  documents: 9,
+  disputes: 10,
+  inspection: 11,
+  listing: 12,
+} as const;
+
+export type TimelineEntityType = keyof typeof TIMELINE_ENTITY_TYPES;
+
+function resolveTimelineEntityType(entityType: TimelineEntityType | number): number {
+  if (typeof entityType === "number") return entityType;
+  const code = TIMELINE_ENTITY_TYPES[entityType];
+  if (code === undefined) {
+    throw new Error(
+      `Unknown timeline entity type "${entityType}"; expected one of ${Object.keys(TIMELINE_ENTITY_TYPES).join(", ")} or a numeric code`,
+    );
+  }
+  return code;
 }

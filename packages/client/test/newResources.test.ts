@@ -226,6 +226,77 @@ describe("financials statistics survive a single-object response", () => {
   });
 });
 
+describe("timeline & notes (numeric entity codes, non-JSON:API)", () => {
+  const timelinePayload = {
+    pagination: { total: 2, current_page: 1 },
+    list: [
+      { id: 1, entity_type: "Note", action: 5, message_data: { text: "hi" } },
+      { id: 2, entity_type: "Note", action: 5, message_data: { text: "yo" } },
+    ],
+    unread_count: 0,
+    counts: {},
+  };
+
+  it("lists notes via GET /timeline with filter=notes and lease code 1", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(timelinePayload));
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const { items, total } = await client.productivity.listNotes("lease", 1530700);
+
+    expect(total).toBe(2);
+    expect(items).toHaveLength(2);
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("/timeline?");
+    expect(url).toContain("entity_id=1530700");
+    expect(url).toContain("entity_type=1");
+    expect(url).toContain("filter=notes");
+  });
+
+  it("maps entity type names to numeric codes (contact=2, lead=8)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(timelinePayload));
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    await client.productivity.listTimeline("lead", 7, { filter: "activity" });
+
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("entity_type=8");
+    expect(url).toContain("filter=activity");
+    await expect(client.productivity.listTimeline("bogus" as never, 1)).rejects.toThrow(
+      /Unknown timeline entity type/,
+    );
+  });
+
+  it("creates a note with a plain resource_id/resource_type body (no JSON:API envelope)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({ id: 42, text: "note text", resource_id: 1530700 }, 201),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    await client.productivity.createNote("lease", 1530700, { text: "note text" });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.tenantcloud.com/notes");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      text: "note text",
+      resource_id: 1530700,
+      resource_type: 1,
+    });
+  });
+
+  it("updates a note via PUT /notes/{id}", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: 42, text: "edited" }));
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    await client.productivity.updateNote(42, { text: "edited" });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.tenantcloud.com/notes/42");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body as string)).toEqual({ text: "edited", id: 42 });
+  });
+});
+
 describe("new write paths", () => {
   it("creates a task via JSON:API", async () => {
     const fetchMock = vi.fn().mockResolvedValue(

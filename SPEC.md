@@ -145,7 +145,13 @@ Bearer` + `X-Requested-With: XMLHttpRequest`.
       - normalizeItem threw on empty-string id (aggregate stats) -> coerces to 0
 - [ ] known server/permission limits (not code bugs): `/transactions/accounts` returns 500
       on a bare call; `/owner/statistics/balances` 403 for non-owner accounts
-- [ ] notes/documents are entity-scoped (need parent filters); reachable via tc_request
+- [x] notes: there is NO GET /notes - list via GET /timeline (entity_id + numeric entity_type +
+      filter=notes); write via POST /notes / PUT /notes/{id} with plain body (resource_id +
+      numeric resource_type). Codes (from dashboard bundle, read path verified live): lease=1,
+      contact=2, application=3, user=4, maintenance=5, demo=6, ticket=7, lead=8, documents=9,
+      disputes=10, inspection=11, listing=12. Write path matches dashboard code, not yet
+      exercised live.
+- [ ] documents are entity-scoped (need parent filters); reachable via tc_request
 - [ ] remaining breadth: listings (user-owned), payments/stripe-connect, inspections records,
       renter-profile tools, property sub-resources (keys/equipment/specs)
 - [ ] npm publish (later, when user decides)
@@ -153,6 +159,7 @@ Bearer` + `X-Requested-With: XMLHttpRequest`.
 ### Resource-type cheatsheet (confirmed live, for JSON:API writes)
 contacts=`userClient` (camelCase attrs), leases=`leases`, transaction=`transaction`,
 transaction_payment=`transaction_payment`, transactions_recurring=`transactions_recurring`,
-maintenance_request=`maintenance_request`, task=`task`, note=`note`, calendar_event=`calendar_event`,
+maintenance_request=`maintenance_request`, task=`task`, calendar_event=`calendar_event`,
+(notes are NOT JSON:API - see the timeline/notes item above),
 file=`file`, contact_insurance=`contact_insurance`, lease_roommate=`lease_roommate`, notice=`notice`,
 application=`application`, screening=`screening`, lead=`lead`, owner_agreement=`owner_agreement`.

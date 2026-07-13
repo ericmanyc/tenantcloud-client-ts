@@ -101,24 +101,50 @@ export function registerProductivityTools(server: McpServer, client: TcClient): 
     },
   );
 
+  const timelineEntityType = z
+    .enum(["lease", "contact", "application", "user", "maintenance", "demo", "ticket", "lead", "documents", "disputes", "inspection", "listing"])
+    .describe("Entity the notes/timeline attach to (lease = a lease, contact = a contact/tenant)");
+
   server.registerTool(
     "list_notes",
     {
       description:
-        "List notes attached to an entity. Provide the entity type and id (notes are entity-scoped).",
+        "List notes attached to an entity (read via the timeline feed's Notes tab; there is no standalone notes list endpoint).",
       inputSchema: {
-        noteableType: z.string().describe("Entity type the notes attach to (e.g. lease, property, userClient)"),
-        noteableId: z.number().int().describe("Entity ID"),
+        entityType: timelineEntityType,
+        entityId: z.number().int().describe("Entity ID (e.g. lease ID for entityType=lease)"),
         page: pageParam,
       },
     },
-    async ({ noteableType, noteableId, page }) => {
+    async ({ entityType, entityId, page }) => {
       try {
-        const { items, pagination } = await client.productivity.listNotes(
-          { noteable_type: noteableType, noteable_id: noteableId },
-          { page },
-        );
-        return toolSuccess({ data: items, count: items.length, pagination });
+        const { items, total } = await client.productivity.listNotes(entityType, entityId, { page });
+        return toolSuccess({ data: items, count: items.length, total });
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "list_timeline",
+    {
+      description:
+        "Activity timeline feed for an entity (lease, contact, lead, ...). filter selects the dashboard tab: all, notes, tasks, activity, files.",
+      inputSchema: {
+        entityType: timelineEntityType,
+        entityId: z.number().int().describe("Entity ID"),
+        filter: z.enum(["all", "notes", "tasks", "activity", "files"]).optional().describe("Tab filter (default all)"),
+        page: pageParam,
+      },
+    },
+    async ({ entityType, entityId, filter, page }) => {
+      try {
+        const { items, total } = await client.productivity.listTimeline(entityType, entityId, {
+          filter,
+          page,
+        });
+        return toolSuccess({ data: items, count: items.length, total });
       } catch (error) {
         return toolError(error);
       }
@@ -128,17 +154,20 @@ export function registerProductivityTools(server: McpServer, client: TcClient): 
   server.registerTool(
     "create_note",
     {
-      description: "Create a note attached to an entity (lease, property, contact, etc.).",
+      description: "Create a note attached to an entity (lease, contact, lead, ...).",
       inputSchema: {
         text: z.string().describe("Note text"),
-        noteableType: z.string().describe("Entity type (e.g. lease, property, userClient)"),
-        noteableId: z.number().int().describe("Entity ID"),
+        entityType: timelineEntityType,
+        entityId: z.number().int().describe("Entity ID"),
+        remindDate: z.string().optional().describe("Optional reminder date (YYYY-MM-DD)"),
       },
     },
-    async ({ text, noteableType, noteableId }) => {
+    async ({ text, entityType, entityId, remindDate }) => {
       try {
         const note = await client.productivity.createNote(
-          compact({ text, noteable_type: noteableType, noteable_id: noteableId }),
+          entityType,
+          entityId,
+          compact({ text, remind_date: remindDate }),
         );
         return toolSuccess({ created: true, note });
       } catch (error) {

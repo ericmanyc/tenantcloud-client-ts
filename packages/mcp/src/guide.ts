@@ -301,7 +301,11 @@ future lease that still requires signatures is an unsigned renewal.
 
 ### Productivity, Documents & Contacts
 - \`list_tasks\`, \`create_task\` (\`title\`, \`remindDate\` required), \`complete_task\`, \`delete_task\`
-- \`list_calendar_events\` (date range); \`list_notes\` / \`create_note\` (entity-scoped: \`noteableType\` + \`noteableId\`)
+- \`list_calendar_events\` (date range)
+- \`list_notes\` / \`create_note\` / \`list_timeline\` (entity-scoped: \`entityType\` lease/contact/lead/... + \`entityId\`).
+  Notes are read from GET /timeline (filter=notes) - there is no GET /notes. The raw API takes
+  numeric codes for entity_type/resource_type: lease=1, contact=2, application=3, user=4,
+  maintenance=5, demo=6, ticket=7, lead=8, documents=9, disputes=10, inspection=11, listing=12.
 - \`list_files\`, \`get_file\` (returns a download URL)
 - \`create_contact\` / \`update_contact\` / \`invite_contact\` (sends a portal invite - confirm first)
 - \`list_contact_insurances\`
