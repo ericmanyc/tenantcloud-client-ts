@@ -66,6 +66,7 @@ export { TcClient, type TcClientOptions } from "./tcClient.js";
 export {
   JsonApiResourceClient,
   jsonApiBody,
+  jsonApiRelationships,
   normalizeItem,
   parseJsonApiList,
   parseJsonApiOne,
@@ -74,6 +75,7 @@ export {
   type HttpMethod,
   type JsonApiList,
   type JsonApiRecord,
+  type JsonApiRelationship,
   type PageInfo,
   type RequestOptions,
   type TcHttp,

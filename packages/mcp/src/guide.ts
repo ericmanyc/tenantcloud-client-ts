@@ -312,7 +312,12 @@ future lease that still requires signatures is an unsigned renewal.
 
 ### Portfolio (Keys & Locks, Equipment)
 - \`list_property_keys\` (\`propertyId\`) - the actual door/lockbox codes usually live in each key's \`comment\` field
-- \`create_property_key\` (\`propertyId\`, \`keyname\`; optional \`comment\`, \`type\`), \`update_property_key\`, \`delete_property_key\`
+- \`create_property_key\` (\`propertyId\`, \`keyname\`; optional \`unitId\`, \`comment\`, \`type\`), \`update_property_key\`, \`delete_property_key\`.
+  Keys link to their property through the JSON:API \`relationships\` object, not \`attributes\` -
+  a raw \`tc_request\` POST with \`property_id\` in \`attributes\` returns 201 but orphans the key.
+  Body shape: \`{"data":{"type":"property_key","attributes":{"keyname":"...","type":1},
+  "relationships":{"property":{"data":{"type":"property","id":"<propertyId>"}},
+  "unit":{"data":{"type":"units","id":"<unitId>"}}}}}\`
 - \`list_equipment\` (\`propertyId\` / \`unitId\` / \`categoryId\`) - appliances, HVAC, water heaters, meters
 - \`create_equipment\` (\`propertyId\`; optional \`unitId\`, \`make\`, \`modelNumber\`, \`vinNumber\`, \`price\`, install/warranty dates), \`update_equipment\`, \`delete_equipment\`
 

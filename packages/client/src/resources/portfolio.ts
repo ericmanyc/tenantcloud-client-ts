@@ -9,8 +9,12 @@
  *   GET/POST         /property/equipment      (filter[property_id], filter[unit_id])
  *   GET/PATCH/DELETE /property/equipment/{id}
  *
- * Note: a key's owning property is not echoed back in its attributes, but the
- * list still honours filter[property_id].
+ * Note: a key's owning property is NOT an attribute - it is carried by the
+ * JSON:API `relationships` object (`property`, and `units` for a unit-specific
+ * key). A POST that puts `property_id` in `attributes` is accepted with 201 but
+ * silently creates an orphan key that never shows up under the property
+ * (verified live 2026-08-06), so the ids are lifted into `relationships` here.
+ * Reads never echo relationships back - only the create/update response does.
  */
 import {
   labelPropertyKeyType,
@@ -21,7 +25,7 @@ import {
   toNumberOrNull,
   toStringOrNull,
 } from "../json.js";
-import { jsonApiBody, withQuery, type TcHttp } from "./jsonApi.js";
+import { jsonApiBody, jsonApiRelationships, withQuery, type TcHttp } from "./jsonApi.js";
 
 export interface TcPropertyKey {
   id: number;
@@ -33,6 +37,14 @@ export interface TcPropertyKey {
   type: number | null;
   /** Human label for `type` (e.g. "Main door"), or null if the code is unknown. */
   typeLabel: string | null;
+  /**
+   * Owning property, read from the JSON:API `property` relationship. Only the
+   * create/update response carries it; list/get responses leave it null (use
+   * the `propertyId` list filter to know which property a key belongs to).
+   */
+  propertyId: number | null;
+  /** Owning unit, if the key is unit-specific. Same caveat as `propertyId`. */
+  unitId: number | null;
   createdAt: Date | null;
 }
 
@@ -44,6 +56,8 @@ export function parsePropertyKey(raw: Record<string, unknown>): TcPropertyKey {
     comment: toStringOrNull(pick(raw, "comment")),
     type,
     typeLabel: labelPropertyKeyType(type),
+    propertyId: toNumberOrNull(pick(raw, "property_id")),
+    unitId: toNumberOrNull(pick(raw, "unit_id")),
     createdAt: parseTcDateOrNull(pick(raw, "created_at")),
   };
 }
@@ -95,6 +109,34 @@ export function parsePropertyEquipment(raw: Record<string, unknown>): TcProperty
 interface RawEnvelopeItem {
   id?: unknown;
   attributes?: Record<string, unknown> | null;
+  relationships?: Record<string, unknown> | null;
+}
+
+/**
+ * Flatten `relationships: { property: { data: { id } } }` into `property_id`
+ * entries so the parsers can read them like any other field. Existing
+ * attributes win; a relationship with `data: null` yields a null id.
+ */
+function relationshipIds(relationships: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [name, rel] of Object.entries(relationships ?? {})) {
+    const data = (rel as { data?: { id?: unknown } | null } | null)?.data;
+    if (data === undefined) continue;
+    const id = data === null ? null : (data.id ?? null);
+    // Relationship names are inconsistently pluralised ("property" but "units"),
+    // so record both spellings: "units" -> unit_id and units_id.
+    out[`${name}_id`] = id;
+    if (name.endsWith("s")) out[`${name.slice(0, -1)}_id`] = id;
+  }
+  return out;
+}
+
+function flattenItem(item: RawEnvelopeItem): Record<string, unknown> {
+  return {
+    ...relationshipIds(item.relationships),
+    ...item.attributes,
+    id: toNumber(item.id ?? 0),
+  };
 }
 
 function rawRecords(payload: unknown): { records: Record<string, unknown>[]; total: number } {
@@ -106,7 +148,7 @@ function rawRecords(payload: unknown): { records: Record<string, unknown>[]; tot
   const records: Record<string, unknown>[] = [];
   for (const item of arr) {
     if (!item || !item.attributes) continue;
-    records.push({ ...item.attributes, id: toNumber(item.id ?? 0) });
+    records.push(flattenItem(item));
   }
   return { records, total: p.meta?.pagination?.total ?? records.length };
 }
@@ -114,7 +156,7 @@ function rawRecords(payload: unknown): { records: Record<string, unknown>[]; tot
 function rawOne(payload: unknown): Record<string, unknown> | null {
   const p = (payload ?? {}) as { data?: RawEnvelopeItem | null };
   if (!p.data || typeof p.data !== "object" || !p.data.attributes) return null;
-  return { ...p.data.attributes, id: toNumber(p.data.id ?? 0) };
+  return flattenItem(p.data);
 }
 
 export interface PropertyKeyListOptions {
@@ -160,9 +202,31 @@ export class PropertyKeysClient {
     return one ? parsePropertyKey(one) : null;
   }
 
+  /**
+   * Split `property_id`/`unit_id` out of a caller-supplied attribute bag and
+   * into a JSON:API relationships object - the API only links a key to its
+   * property through `relationships`, and silently ignores the attributes.
+   */
+  private splitBody(input: Record<string, unknown>): {
+    attributes: Record<string, unknown>;
+    relationships: ReturnType<typeof jsonApiRelationships>;
+  } {
+    const { property_id: propertyId, unit_id: unitId, ...attributes } = input;
+    const relationships = jsonApiRelationships({
+      property: propertyId === undefined ? undefined : ["property", propertyId as number | string | null],
+      unit: unitId === undefined ? undefined : ["units", unitId as number | string | null],
+    });
+    return { attributes, relationships };
+  }
+
+  /**
+   * Create a key. `property_id` (and optional `unit_id`) may be passed among the
+   * attributes; they are sent as JSON:API relationships.
+   */
   async create(attributes: Record<string, unknown>, signal?: AbortSignal): Promise<TcPropertyKey | null> {
+    const { attributes: attrs, relationships } = this.splitBody(attributes);
     const payload = await this.http.request("POST", "/property/keys", {
-      body: jsonApiBody("property_key", attributes),
+      body: jsonApiBody("property_key", attrs, undefined, relationships),
       signal,
     });
     const one = rawOne(payload);
@@ -174,8 +238,9 @@ export class PropertyKeysClient {
     attributes: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<TcPropertyKey | null> {
+    const { attributes: attrs, relationships } = this.splitBody(attributes);
     const payload = await this.http.request("PATCH", `/property/keys/${id}`, {
-      body: jsonApiBody("property_key", attributes, id),
+      body: jsonApiBody("property_key", attrs, id, relationships),
       signal,
     });
     const one = rawOne(payload);

@@ -145,6 +145,66 @@ describe("portfolio client paths", () => {
     expect(url).toContain(`${encodeURIComponent("filter[property_id]")}=123`);
   });
 
+  it("creates a key with property/unit sent as JSON:API relationships, not attributes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          data: {
+            type: "property_key",
+            id: "77",
+            attributes: { keyname: "Unit 1 Door", type: 1, comment: "<p>code</p>" },
+            relationships: {
+              property: { data: { type: "property", id: "862773" } },
+              units: { data: { type: "units", id: "1392965" } },
+            },
+          },
+        },
+        201,
+      ),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const key = await client.portfolio.keys.create({
+      property_id: 862773,
+      unit_id: 1392965,
+      keyname: "Unit 1 Door",
+      type: 1,
+      comment: "<p>code</p>",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("https://api.tenantcloud.com/property/keys");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      data: {
+        type: "property_key",
+        attributes: { keyname: "Unit 1 Door", type: 1, comment: "<p>code</p>" },
+        relationships: {
+          property: { data: { type: "property", id: "862773" } },
+          unit: { data: { type: "units", id: "1392965" } },
+        },
+      },
+    });
+    expect(key).toMatchObject({ id: 77, keyname: "Unit 1 Door", propertyId: 862773, unitId: 1392965 });
+  });
+
+  it("updates a key without touching relationships when none are given", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: { type: "property_key", id: "77", attributes: { keyname: "Back Door", type: 2 } },
+      }),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const key = await client.portfolio.keys.update(77, { keyname: "Back Door", type: 2 });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(JSON.parse(init.body as string)).toEqual({
+      data: { type: "property_key", id: "77", attributes: { keyname: "Back Door", type: 2 } },
+    });
+    expect(key).toMatchObject({ id: 77, propertyId: null, unitId: null });
+  });
+
   it("creates equipment via the property_equipment JSON:API type", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(

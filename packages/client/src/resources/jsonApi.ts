@@ -145,15 +145,44 @@ export function withQuery(
   return `${path}${path.includes("?") ? "&" : "?"}${parts.join("&")}`;
 }
 
-/** Build a JSON:API write body: `{ data: { type, id?, attributes } }`. */
+/**
+ * A JSON:API relationship linkage: `{ data: { type, id } }`, or `{ data: null }`
+ * to clear the link.
+ */
+export interface JsonApiRelationship {
+  data: { type: string; id: string } | null;
+}
+
+/**
+ * Build a relationships object from `{ name: [type, id] }` pairs. Entries whose
+ * id is undefined are skipped; an explicit `null` id clears the relationship.
+ */
+export function jsonApiRelationships(
+  links: Record<string, [type: string, id: number | string | null | undefined] | undefined>,
+): Record<string, JsonApiRelationship> {
+  const out: Record<string, JsonApiRelationship> = {};
+  for (const [name, link] of Object.entries(links)) {
+    if (!link) continue;
+    const [type, id] = link;
+    if (id === undefined) continue;
+    out[name] = id === null ? { data: null } : { data: { type, id: String(id) } };
+  }
+  return out;
+}
+
+/** Build a JSON:API write body: `{ data: { type, id?, attributes, relationships? } }`. */
 export function jsonApiBody(
   type: string,
   attributes: Record<string, unknown>,
   id?: number | string,
+  relationships?: Record<string, JsonApiRelationship>,
 ): { data: Record<string, unknown> } {
   const data: Record<string, unknown> = { type, attributes };
   if (id !== undefined && id !== null) {
     data.id = String(id);
+  }
+  if (relationships && Object.keys(relationships).length > 0) {
+    data.relationships = relationships;
   }
   return { data };
 }

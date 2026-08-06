@@ -40,6 +40,7 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
       inputSchema: {
         propertyId: z.number().int().describe("Property ID the key belongs to"),
         keyname: z.string().describe("Label for the key/lock, e.g. 'Front Gate'"),
+        unitId: z.number().int().optional().describe("Unit ID, if the key is specific to one unit"),
         comment: z.string().optional().describe("Notes/details - this is where the lockbox/door code typically goes"),
         type: z
           .number()
@@ -50,10 +51,10 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
           ),
       },
     },
-    async ({ propertyId, keyname, comment, type }) => {
+    async ({ propertyId, keyname, unitId, comment, type }) => {
       try {
         const created = await client.portfolio.keys.create(
-          compact({ property_id: propertyId, keyname, comment, type }),
+          compact({ property_id: propertyId, unit_id: unitId, keyname, comment, type: type ?? 1 }),
         );
         return toolSuccess({ created: true, key: created });
       } catch (error) {
@@ -69,6 +70,8 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
       inputSchema: {
         id: z.number().int().describe("Key ID"),
         keyname: z.string().optional(),
+        propertyId: z.number().int().optional().describe("Move the key to this property"),
+        unitId: z.number().int().optional().describe("Move the key to this unit"),
         comment: z.string().optional().describe("Notes/details (where the code lives)"),
         type: z
           .number()
@@ -79,9 +82,12 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
           ),
       },
     },
-    async ({ id, keyname, comment, type }) => {
+    async ({ id, keyname, propertyId, unitId, comment, type }) => {
       try {
-        const updated = await client.portfolio.keys.update(id, compact({ keyname, comment, type }));
+        const updated = await client.portfolio.keys.update(
+          id,
+          compact({ keyname, property_id: propertyId, unit_id: unitId, comment, type }),
+        );
         return toolSuccess({ updated: true, key: updated });
       } catch (error) {
         return toolError(error);
