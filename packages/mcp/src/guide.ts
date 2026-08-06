@@ -315,9 +315,13 @@ future lease that still requires signatures is an unsigned renewal.
 - \`create_property_key\` (\`propertyId\`, \`keyname\`; optional \`unitId\`, \`comment\`, \`type\`), \`update_property_key\`, \`delete_property_key\`.
   Keys link to their property through the JSON:API \`relationships\` object, not \`attributes\` -
   a raw \`tc_request\` POST with \`property_id\` in \`attributes\` returns 201 but orphans the key.
-  Body shape: \`{"data":{"type":"property_key","attributes":{"keyname":"...","type":1},
-  "relationships":{"property":{"data":{"type":"property","id":"<propertyId>"}},
+  Send the complete relationship set, with \`{"data":null}\` for the ones you are not setting.
+  Body shape: \`{"data":{"type":"property_key","attributes":{"keyname":"...","type":1,
+  "comment":"<p>...</p>"},"relationships":{"avatar":{"data":null},
+  "property":{"data":{"type":"property","id":"<propertyId>"}},
   "unit":{"data":{"type":"units","id":"<unitId>"}}}}}\`
+  (use \`"unit":{"data":null}\` for a property-level key). \`comment\` is rich text -
+  the app stores it HTML-wrapped, e.g. \`<p>Front door: 1234</p>\`.
 - \`list_equipment\` (\`propertyId\` / \`unitId\` / \`categoryId\`) - appliances, HVAC, water heaters, meters
 - \`create_equipment\` (\`propertyId\`; optional \`unitId\`, \`make\`, \`modelNumber\`, \`vinNumber\`, \`price\`, install/warranty dates), \`update_equipment\`, \`delete_equipment\`
 

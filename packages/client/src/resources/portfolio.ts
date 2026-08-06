@@ -10,10 +10,13 @@
  *   GET/PATCH/DELETE /property/equipment/{id}
  *
  * Note: a key's owning property is NOT an attribute - it is carried by the
- * JSON:API `relationships` object (`property`, and `units` for a unit-specific
+ * JSON:API `relationships` object (`property`, and `unit` for a unit-specific
  * key). A POST that puts `property_id` in `attributes` is accepted with 201 but
  * silently creates an orphan key that never shows up under the property
  * (verified live 2026-08-06), so the ids are lifted into `relationships` here.
+ * The web app's own POST always sends the complete relationship set -
+ * `avatar`, `property` and `unit` - filling unset ones with `{"data":null}`
+ * rather than leaving them out, so create() mirrors that shape exactly.
  * Reads never echo relationships back - only the create/update response does.
  */
 import {
@@ -206,15 +209,27 @@ export class PropertyKeysClient {
    * Split `property_id`/`unit_id` out of a caller-supplied attribute bag and
    * into a JSON:API relationships object - the API only links a key to its
    * property through `relationships`, and silently ignores the attributes.
+   *
+   * On create (`full`) the whole relationship set is sent the way the web app
+   * sends it - `avatar`, `property` and `unit` are all present, with
+   * `{"data":null}` standing in for the ones the caller left out. On update the
+   * omitted ones stay omitted, so a partial PATCH cannot clear the key's unit
+   * or avatar by accident.
    */
-  private splitBody(input: Record<string, unknown>): {
+  private splitBody(
+    input: Record<string, unknown>,
+    full: boolean,
+  ): {
     attributes: Record<string, unknown>;
     relationships: ReturnType<typeof jsonApiRelationships>;
   } {
     const { property_id: propertyId, unit_id: unitId, ...attributes } = input;
+    const absent = full ? null : undefined;
     const relationships = jsonApiRelationships({
-      property: propertyId === undefined ? undefined : ["property", propertyId as number | string | null],
-      unit: unitId === undefined ? undefined : ["units", unitId as number | string | null],
+      avatar: full ? ["avatar", null] : undefined,
+      property:
+        propertyId === undefined ? undefined : ["property", propertyId as number | string | null],
+      unit: ["units", unitId === undefined ? absent : (unitId as number | string | null)],
     });
     return { attributes, relationships };
   }
@@ -224,7 +239,7 @@ export class PropertyKeysClient {
    * attributes; they are sent as JSON:API relationships.
    */
   async create(attributes: Record<string, unknown>, signal?: AbortSignal): Promise<TcPropertyKey | null> {
-    const { attributes: attrs, relationships } = this.splitBody(attributes);
+    const { attributes: attrs, relationships } = this.splitBody(attributes, true);
     const payload = await this.http.request("POST", "/property/keys", {
       body: jsonApiBody("property_key", attrs, undefined, relationships),
       signal,
@@ -238,7 +253,7 @@ export class PropertyKeysClient {
     attributes: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<TcPropertyKey | null> {
-    const { attributes: attrs, relationships } = this.splitBody(attributes);
+    const { attributes: attrs, relationships } = this.splitBody(attributes, false);
     const payload = await this.http.request("PATCH", `/property/keys/${id}`, {
       body: jsonApiBody("property_key", attrs, id, relationships),
       signal,

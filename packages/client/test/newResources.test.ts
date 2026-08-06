@@ -180,12 +180,53 @@ describe("portfolio client paths", () => {
         type: "property_key",
         attributes: { keyname: "Unit 1 Door", type: 1, comment: "<p>code</p>" },
         relationships: {
+          avatar: { data: null },
           property: { data: { type: "property", id: "862773" } },
           unit: { data: { type: "units", id: "1392965" } },
         },
       },
     });
     expect(key).toMatchObject({ id: 77, keyname: "Unit 1 Door", propertyId: 862773, unitId: 1392965 });
+  });
+
+  it("creates a property-level key with the app's full relationship set (unit/avatar null)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          data: {
+            type: "property_key",
+            id: "78",
+            attributes: { keyname: "106 Front Door", type: 1, comment: "<p>code</p>" },
+            relationships: { property: { data: { type: "property", id: "862774" } }, unit: { data: null } },
+          },
+        },
+        201,
+      ),
+    );
+    const client = new TcClient(new StaticTokenProvider("tok"), { fetch: fetchMock });
+
+    const key = await client.portfolio.keys.create({
+      property_id: 862774,
+      keyname: "106 Front Door",
+      type: 1,
+      comment: "<p>code</p>",
+    });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    // Byte-identical in shape to what app.tenantcloud.com POSTs: every
+    // relationship is present, unset ones carry an explicit null linkage.
+    expect(JSON.parse(init.body as string)).toEqual({
+      data: {
+        type: "property_key",
+        attributes: { keyname: "106 Front Door", type: 1, comment: "<p>code</p>" },
+        relationships: {
+          avatar: { data: null },
+          property: { data: { type: "property", id: "862774" } },
+          unit: { data: null },
+        },
+      },
+    });
+    expect(key).toMatchObject({ id: 78, propertyId: 862774, unitId: null });
   });
 
   it("updates a key without touching relationships when none are given", async () => {

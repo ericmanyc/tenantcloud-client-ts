@@ -10,6 +10,19 @@ import { compact, maxResultsParam, toolError, toolSuccess } from "./helpers.js";
  * TenantCloud. Keys hold door/lockbox codes; equipment tracks appliances, HVAC,
  * meters, etc. against a property or unit.
  */
+/**
+ * A key's `comment` is a rich-text field: the web app always stores it as HTML
+ * (`<p>Front door: 1234</p>`). Wrap plain text the same way - one paragraph per
+ * line - so codes written through the MCP render like the ones written in the
+ * app. Anything that already contains a tag is passed through untouched.
+ */
+function asRichText(comment: string | undefined): string | undefined {
+  if (comment === undefined || /<[a-z/]/i.test(comment)) return comment;
+  const paragraphs = comment.split(/\r?\n/).filter((line) => line.trim() !== "");
+  if (paragraphs.length === 0) return comment;
+  return paragraphs.map((line) => `<p>${line}</p>`).join("");
+}
+
 export function registerPortfolioTools(server: McpServer, client: TcClient, cache: EntityCache): void {
   // --- Keys & Locks ---
 
@@ -54,7 +67,13 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
     async ({ propertyId, keyname, unitId, comment, type }) => {
       try {
         const created = await client.portfolio.keys.create(
-          compact({ property_id: propertyId, unit_id: unitId, keyname, comment, type: type ?? 1 }),
+          compact({
+            property_id: propertyId,
+            unit_id: unitId,
+            keyname,
+            comment: asRichText(comment),
+            type: type ?? 1,
+          }),
         );
         return toolSuccess({ created: true, key: created });
       } catch (error) {
@@ -86,7 +105,13 @@ export function registerPortfolioTools(server: McpServer, client: TcClient, cach
       try {
         const updated = await client.portfolio.keys.update(
           id,
-          compact({ keyname, property_id: propertyId, unit_id: unitId, comment, type }),
+          compact({
+            keyname,
+            property_id: propertyId,
+            unit_id: unitId,
+            comment: asRichText(comment),
+            type,
+          }),
         );
         return toolSuccess({ updated: true, key: updated });
       } catch (error) {
