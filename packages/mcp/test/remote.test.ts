@@ -62,6 +62,60 @@ describe("VaultTokenProvider", () => {
     }
   });
 
+  it("keepAlive refreshes even while the access token is still valid", async () => {
+    const store = new MemoryRemoteStore();
+    const user = await store.upsertUser("k@b.co", "x");
+    await store.saveVault(
+      user.id,
+      sealTokenSet({ accessToken: fakeJwt(3600), refreshToken: "r1", fingerprint: "fp" }, VAULT_KEY),
+    );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ access_token: fakeJwt(3600), refresh_token: "r2" }), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      expect(await new VaultTokenProvider(user.id, store, VAULT_KEY).keepAlive()).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const persisted = JSON.parse(open((await store.loadVault(user.id))!, VAULT_KEY)) as {
+        refreshToken: string;
+      };
+      expect(persisted.refreshToken).toBe("r2");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("never replays a refresh token another instance already rotated", async () => {
+    const store = new MemoryRemoteStore();
+    const user = await store.upsertUser("s@b.co", "x");
+    const first = fakeJwt(3600);
+    await store.saveVault(
+      user.id,
+      sealTokenSet({ accessToken: first, refreshToken: "r1", fingerprint: "fp" }, VAULT_KEY),
+    );
+    const sentRefreshTokens: string[] = [];
+    let n = 1;
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      sentRefreshTokens.push((JSON.parse(String(init.body)) as { refresh_token: string }).refresh_token);
+      n++;
+      return new Response(JSON.stringify({ access_token: fakeJwt(3600 + n), refresh_token: `r${n}` }), {
+        status: 200,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const sessionA = new VaultTokenProvider(user.id, store, VAULT_KEY);
+      expect(await sessionA.getToken()).toBe(first); // A caches r1
+      await new VaultTokenProvider(user.id, store, VAULT_KEY).keepAlive(); // rotates r1 -> r2
+      await sessionA.onTokenRejected(first); // A must adopt r2's set, not replay r1
+      expect(sentRefreshTokens).toEqual(["r1"]);
+      await sessionA.keepAlive();
+      expect(sentRefreshTokens).toEqual(["r1", "r2"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("returns null (signed out) when there is no vault entry", async () => {
     const store = new MemoryRemoteStore();
     const provider = new VaultTokenProvider(99, store, VAULT_KEY);

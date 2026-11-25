@@ -44,8 +44,13 @@ export class VaultTokenProvider implements TcAuthTokenProvider {
         return this.cached.accessToken;
       }
 
-      const stored = this.cached ?? (await this.loadFromVault());
+      // ALWAYS re-read the vault before refreshing. Refresh tokens rotate on
+      // every use, and another provider instance (another MCP session, or the
+      // keep-alive) may have rotated ours since we cached it. Refreshing from a
+      // stale cached copy replays a dead refresh token and kills the chain.
+      const stored = await this.loadFromVault();
       if (!stored) {
+        this.cached = null;
         return null;
       }
 
@@ -54,14 +59,7 @@ export class VaultTokenProvider implements TcAuthTokenProvider {
         return stored.accessToken;
       }
 
-      const refreshed = await refreshTokens(stored, API_URL, signal);
-      if (!refreshed) {
-        this.cached = null;
-        return null;
-      }
-      await this.persist(refreshed);
-      this.cached = refreshed;
-      return refreshed.accessToken;
+      return (await this.refresh(stored, signal))?.accessToken ?? null;
     });
   }
 
@@ -70,14 +68,34 @@ export class VaultTokenProvider implements TcAuthTokenProvider {
       if (this.cached?.accessToken !== rejectedToken) {
         return;
       }
-      const refreshed = await refreshTokens(this.cached, API_URL, signal);
-      if (refreshed) {
-        await this.persist(refreshed);
-        this.cached = refreshed;
-      } else {
-        this.cached = null;
+      const stored = await this.loadFromVault();
+      if (stored && stored.accessToken !== rejectedToken) {
+        this.cached = stored; // already rotated elsewhere; adopt it
+        return;
       }
+      await this.refresh(stored, signal);
     });
+  }
+
+  /**
+   * Force a refresh from the vault's current token set, even if the access
+   * token is still valid, so the refresh-token chain never sits idle long
+   * enough to expire. Returns whether the chain is still alive.
+   */
+  keepAlive(signal?: AbortSignal): Promise<boolean> {
+    return serialized(this.userId, async () => {
+      const stored = await this.loadFromVault();
+      return (await this.refresh(stored, signal)) !== null;
+    });
+  }
+
+  private async refresh(stored: TcTokenSet | null, signal?: AbortSignal): Promise<TcTokenSet | null> {
+    const refreshed = stored ? await refreshTokens(stored, API_URL, signal) : null;
+    if (refreshed) {
+      await this.persist(refreshed); // persist the rotated set before anyone uses it
+    }
+    this.cached = refreshed;
+    return refreshed;
   }
 
   private async loadFromVault(): Promise<TcTokenSet | null> {

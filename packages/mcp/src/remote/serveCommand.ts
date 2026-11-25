@@ -5,7 +5,7 @@ import { PgRemoteStore } from "./pgStore.js";
 import { VaultTokenProvider } from "./vaultTokenProvider.js";
 import { setSignInHint } from "../tools/helpers.js";
 
-const KEEPALIVE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_KEEPALIVE_MINUTES = 60;
 
 /**
  * `tc-mcp serve` - run the hosted multi-user server (Railway etc.).
@@ -15,6 +15,8 @@ const KEEPALIVE_INTERVAL_MS = 24 * 60 * 60 * 1000;
  *   BASE_URL      - public https URL of the deployment (required: OAuth issuer)
  *   TC_VAULT_KEY  - 64 hex chars; encrypts the token vault (required)
  *   TC_ADMIN_KEY  - bearer key for /admin/* endpoints (required)
+ *   KEEPALIVE_INTERVAL_MINUTES - how often to refresh each paired user's
+ *                   token chain so it never idles out. Default 60.
  *   DATABASE_URL  - Postgres connection string. Omitted -> in-memory store
  *                   (every restart loses pairings; only for trying it out).
  */
@@ -52,23 +54,41 @@ export async function serve(): Promise<number> {
     console.error(`tc-mcp remote server listening on :${port} (${baseUrl})`);
   });
 
-  // Keep-alive: refresh every paired user's TenantCloud token chain daily so
+  // Keep-alive: refresh every paired user's TenantCloud token chain on a
+  // fixed cadence (and once at boot, since every redeploy resets the timer) so
   // refresh tokens stay warm even when nobody is using the connector.
+  const minutes = Number(process.env["KEEPALIVE_INTERVAL_MINUTES"] ?? DEFAULT_KEEPALIVE_MINUTES);
+  const intervalMs = (Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_KEEPALIVE_MINUTES) * 60_000;
+  let running = false;
   const keepalive = async () => {
+    if (running) {
+      return;
+    }
+    running = true;
     try {
       const userIds = await store.listVaultUserIds();
+      let ok = 0;
       for (const userId of userIds) {
         const provider = new VaultTokenProvider(userId, store, vaultKey);
-        const token = await provider.getToken();
-        console.error(`keepalive: user ${userId} ${token ? "ok" : "FAILED (needs re-pair)"}`);
+        const alive = await provider.keepAlive(AbortSignal.timeout(30_000)).catch(() => false);
+        if (alive) {
+          ok++;
+        } else {
+          console.error(`keepalive: user ${userId} FAILED (refresh rejected or unreachable; may need re-pair)`);
+        }
       }
+      console.error(`keepalive: ${ok}/${userIds.length} sessions ok`);
     } catch (error) {
       console.error("keepalive error:", error instanceof Error ? error.message : String(error));
+    } finally {
+      running = false;
     }
   };
+  void keepalive();
   setInterval(() => {
     void keepalive();
-  }, KEEPALIVE_INTERVAL_MS).unref();
+  }, intervalMs).unref();
+  console.error(`keepalive: every ${intervalMs / 60_000} min`);
 
   // Stay alive until the process is stopped.
   return new Promise<number>(() => {});

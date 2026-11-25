@@ -106,7 +106,7 @@ re-running `invite` for the same email rotates the code.
 
    This opens the normal TenantCloud browser sign-in (their password, their
    2FA) and uploads the resulting tokens to the server's encrypted vault. The
-   server keeps them fresh from then on (daily keep-alive + refresh on use).
+   server keeps them fresh from then on (keep-alive at boot and every `KEEPALIVE_INTERVAL_MINUTES`, default 60, plus refresh on use; look for `keepalive: N/M sessions ok` in the logs).
 
 2. **Add the connector in claude.ai**: Settings -> Connectors -> Add custom
    connector -> URL `https://<your-app>.up.railway.app/mcp`. Claude opens the
